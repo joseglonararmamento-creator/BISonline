@@ -4,6 +4,8 @@ import {
   signInWithPopup, 
   GoogleAuthProvider, 
   signOut,
+  setPersistence,
+  browserLocalPersistence,
   User as FirebaseUser 
 } from 'firebase/auth';
 import { 
@@ -46,6 +48,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
+    // Ensure persistence is local
+    setPersistence(auth, browserLocalPersistence).catch(console.error);
+
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
 

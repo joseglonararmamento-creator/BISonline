@@ -20,7 +20,8 @@ import {
   Send,
   MessageSquare,
   LayoutGrid,
-  Bell
+  Bell,
+  Users
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
