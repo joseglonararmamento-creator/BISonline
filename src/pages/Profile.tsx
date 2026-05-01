@@ -298,51 +298,69 @@ export default function Profile() {
               accept="image/*"
             />
             <div className="relative">
-              <img 
-                src={profile?.photoURL || 'https://via.placeholder.com/128'} 
-                className={`w-32 h-32 rounded-[32px] border-8 border-white bg-white shadow-xl object-cover transition-opacity ${uploading ? 'opacity-50' : ''}`}
-                alt="Profile"
-              />
-              {uploading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/40 rounded-[32px]">
-                  <div className="relative w-16 h-16 flex items-center justify-center">
-                    <svg className="w-full h-full transform -rotate-90">
-                      <circle
-                        cx="32"
-                        cy="32"
-                        r="28"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="transparent"
-                        className="text-indigo-100"
-                      />
-                      <circle
-                        cx="32"
-                        cy="32"
-                        r="28"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="transparent"
-                        strokeDasharray={175.9}
-                        strokeDashoffset={175.9 - (175.9 * uploadProgress) / 100}
-                        className="text-indigo-600 transition-all duration-300"
-                      />
-                    </svg>
-                    <span className="absolute text-[10px] font-black text-indigo-700">{Math.round(uploadProgress)}%</span>
+              <div className="w-36 h-36 p-1 bg-white rounded-[32px] shadow-xl relative">
+                <img 
+                  src={profile?.photoURL || 'https://via.placeholder.com/150'} 
+                  className={`w-full h-full rounded-[28px] object-cover transition-all duration-500 ${uploading ? 'scale-90 opacity-40 blur-[2px]' : 'group-hover:scale-[1.02]'}`}
+                  alt="Profile"
+                />
+                
+                {/* Upload Hover Overlay */}
+                {isOnline && !uploading && (
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="absolute inset-1 bg-black/40 backdrop-blur-[2px] rounded-[28px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-all duration-300 cursor-pointer overflow-hidden"
+                  >
+                    <motion.div 
+                      initial={{ y: 10, opacity: 0 }}
+                      whileHover={{ y: 0, opacity: 1 }}
+                      className="flex flex-col items-center"
+                    >
+                      <Camera size={28} className="mb-1" />
+                      <span className="text-[10px] font-black uppercase tracking-widest">Change</span>
+                    </motion.div>
+                  </button>
+                )}
+
+                {/* Progress Overlay */}
+                {uploading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
+                    <div className="relative w-20 h-20 flex items-center justify-center">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle
+                          cx="40"
+                          cy="40"
+                          r="34"
+                          stroke="currentColor"
+                          strokeWidth="6"
+                          fill="transparent"
+                          className="text-slate-100"
+                        />
+                        <motion.circle
+                          cx="40"
+                          cy="40"
+                          r="34"
+                          stroke="currentColor"
+                          strokeWidth="6"
+                          fill="transparent"
+                          strokeDasharray={213.6}
+                          strokeDashoffset={213.6 - (213.6 * uploadProgress) / 100}
+                          className="text-indigo-600 transition-all duration-500"
+                          strokeLinecap="round"
+                        />
+                      </svg>
+                      <div className="absolute flex flex-col items-center justify-center">
+                        <span className="text-sm font-black text-indigo-700 tracking-tighter">{Math.round(uploadProgress)}%</span>
+                      </div>
+                    </div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-700 mt-2 animate-pulse">Syncing</p>
                   </div>
-                  <p className="text-[8px] font-black uppercase tracking-widest text-indigo-700 mt-1">Processing</p>
-                </div>
-              )}
+                )}
+              </div>
+              
+              {/* Status Badge */}
+              <div className={`absolute -bottom-1 -right-1 w-6 h-6 border-4 border-white rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} title={isOnline ? 'Online' : 'Offline'}></div>
             </div>
-            {isOnline && !uploading && (
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="absolute inset-0 bg-black/40 rounded-[32px] opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
-                title="Upload Photo from Device"
-              >
-                <Camera size={32} />
-              </button>
-            )}
           </div>
           <div className="pb-0 sm:pb-4 text-center sm:text-left">
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{profile?.displayName}</h2>
