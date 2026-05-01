@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Quiz } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -54,6 +55,9 @@ export default function Lessons() {
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<{ url: string, name: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadOfflineData();
@@ -122,6 +126,37 @@ export default function Lessons() {
     }
   };
 
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile || !storage) return;
+
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      'application/vnd.ms-powerpoint'
+    ];
+
+    if (!allowedTypes.includes(file.type) && !file.name.match(/\.(pdf|doc|docx|ppt|pptx)$/i)) {
+      alert('Please upload a PDF, DOC, or PPT file.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `lessons/${profile.uid}/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+      setAttachedFile({ url: downloadURL, name: file.name });
+    } catch (err: any) {
+      console.error('Upload failed:', err);
+      alert(`Failed to upload file: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const handleAddLesson = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newContent || !profile) return;
@@ -131,6 +166,8 @@ export default function Lessons() {
         title: newTitle,
         content: newContent,
         mediaUrls: mediaUrl ? [mediaUrl] : [],
+        fileUrl: attachedFile?.url || null,
+        fileName: attachedFile?.name || null,
         teacherId: profile.uid,
         createdAt: serverTimestamp(),
       });
@@ -138,6 +175,7 @@ export default function Lessons() {
       setNewTitle('');
       setNewContent('');
       setMediaUrl('');
+      setAttachedFile(null);
     } catch (err) {
       console.error(err);
     }
@@ -360,6 +398,28 @@ export default function Lessons() {
                 <ReactMarkdown>{selectedLesson.content}</ReactMarkdown>
               </div>
 
+              {selectedLesson.fileUrl && (
+                <div className="mt-8 p-4 bg-indigo-50 rounded-2xl border border-indigo-100 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-indigo-600 shadow-sm">
+                      <Download size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{selectedLesson.fileName || 'Attached Document'}</p>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Lesson Material</p>
+                    </div>
+                  </div>
+                  <a 
+                    href={selectedLesson.fileUrl} 
+                    target="_blank" 
+                    rel="noreferrer"
+                    className="px-4 py-2 bg-white text-indigo-600 rounded-lg text-xs font-black uppercase tracking-widest border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                  >
+                    Download
+                  </a>
+                </div>
+              )}
+
               {selectedLesson.mediaUrls && selectedLesson.mediaUrls.length > 0 && (
                 <div className="mt-12 pt-12 border-t border-slate-100">
                   <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2 uppercase tracking-widest text-xs">
@@ -451,8 +511,37 @@ export default function Lessons() {
                     value={mediaUrl}
                     onChange={e => setMediaUrl(e.target.value)}
                     placeholder="https://example.com/video-or-pdf"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none mb-4"
                   />
+                  
+                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Upload Lesson Material (PDF, DOC, PPT)</label>
+                  <div className="flex items-center gap-4">
+                    <input 
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileUpload}
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className={`flex-1 py-3 px-4 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-2 text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-all ${uploading ? 'opacity-50' : ''}`}
+                    >
+                      <Plus size={20} />
+                      {uploading ? 'Uploading...' : attachedFile ? 'Change File' : 'Select File'}
+                    </button>
+                    {attachedFile && (
+                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100 text-xs font-bold">
+                        <CheckCircle2 size={16} />
+                        <span className="truncate max-w-[100px]">{attachedFile.name}</span>
+                        <button type="button" onClick={() => setAttachedFile(null)} className="hover:text-emerald-900">
+                          <X size={14} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="pt-4 flex gap-3">

@@ -5,6 +5,7 @@ import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
+import imageCompression from 'browser-image-compression';
 import { 
   User, 
   Mail, 
@@ -41,6 +42,7 @@ export default function Profile() {
   const [newReminderText, setNewReminderText] = useState('');
   const [selectedClassId, setSelectedClassId] = useState('');
   const [reminderType, setReminderType] = useState<'status' | 'reminder'>('status');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -67,9 +69,25 @@ export default function Profile() {
     }
 
     setUploading(true);
+    setUploadProgress(10);
     try {
-      const storageRef = ref(storage, `profiles/${profile.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
+      // Image Compression Options
+      const options = {
+        maxSizeMB: 0.2, // Compress to ~200KB
+        maxWidthOrHeight: 512, // Sufficient for profile pics
+        useWebWorker: true,
+      };
+
+      console.log(`Original file size: ${file.size / 1024 / 1024} MB`);
+      setUploadProgress(30);
+      const compressedFile = await imageCompression(file, options);
+      console.log(`Compressed file size: ${compressedFile.size / 1024 / 1024} MB`);
+      
+      setUploadProgress(50);
+      const storageRef = ref(storage, `profiles/${profile.uid}/${Date.now()}_${compressedFile.name}`);
+      const snapshot = await uploadBytes(storageRef, compressedFile);
+      
+      setUploadProgress(80);
       const downloadURL = await getDownloadURL(snapshot.ref);
 
       await updateDoc(doc(db, 'users', profile.uid), {
@@ -77,10 +95,16 @@ export default function Profile() {
       });
       
       setNewPhotoURL(downloadURL);
-      alert('Profile picture uploaded successfully!');
-      window.location.reload();
+      setUploadProgress(100);
+      setTimeout(() => {
+        setUploading(false);
+        setUploadProgress(0);
+        alert('Profile picture uploaded successfully!');
+      }, 500);
     } catch (err: any) {
       console.error('Upload failed:', err);
+      setUploading(false);
+      setUploadProgress(0);
       if (err.code === 'storage/unauthorized') {
         alert('Upload failed: You do not have permission to upload files. Please check Storage Rules.');
       } else if (err.code === 'storage/retry-limit-exceeded') {
@@ -88,8 +112,6 @@ export default function Profile() {
       } else {
         alert(`Failed to upload image: ${err.message || 'Unknown error'}`);
       }
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -235,7 +257,6 @@ export default function Profile() {
         photoURL: newPhotoURL
       });
       alert('Profile picture updated successfully!');
-      window.location.reload();
     } catch (err) {
       console.error(err);
       alert('Failed to update profile picture.');
@@ -283,8 +304,33 @@ export default function Profile() {
                 alt="Profile"
               />
               {uploading && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/40 rounded-[32px]">
+                  <div className="relative w-16 h-16 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90">
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="28"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="transparent"
+                        className="text-indigo-100"
+                      />
+                      <circle
+                        cx="32"
+                        cy="32"
+                        r="28"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="transparent"
+                        strokeDasharray={175.9}
+                        strokeDashoffset={175.9 - (175.9 * uploadProgress) / 100}
+                        className="text-indigo-600 transition-all duration-300"
+                      />
+                    </svg>
+                    <span className="absolute text-[10px] font-black text-indigo-700">{Math.round(uploadProgress)}%</span>
+                  </div>
+                  <p className="text-[8px] font-black uppercase tracking-widest text-indigo-700 mt-1">Processing</p>
                 </div>
               )}
             </div>

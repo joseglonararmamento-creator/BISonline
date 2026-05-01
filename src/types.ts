@@ -35,6 +35,8 @@ export interface Lesson {
   title: string;
   content: string;
   mediaUrls: string[];
+  fileUrl?: string;
+  fileName?: string;
   teacherId: string;
   createdAt: any;
 }

@@ -14,6 +14,7 @@ import {
   setDoc, 
   serverTimestamp,
   getDocFromServer,
+  onSnapshot,
   query,
   where,
   collection,
@@ -68,21 +69,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
     testConnection();
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
+      
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = null;
+      }
+
       if (firebaseUser) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-          if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
-            setProfile(data);
+        // Use onSnapshot for real-time profile updates
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
           } else {
             setProfile(null);
           }
-        } catch (err) {
-          console.error("Error fetching user profile:", err);
-          setProfile(null);
-        }
+          setLoading(false);
+        }, (err) => {
+          console.error("Profile listener error:", err);
+          setLoading(false);
+        });
 
         // Background Sync for Quiz Attempts
         if (isOnline) {
@@ -117,14 +127,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
-      unsubscribe();
+      unsubscribeAuth();
+      if (unsubscribeProfile) unsubscribeProfile();
     };
   }, [isOnline]);
 
