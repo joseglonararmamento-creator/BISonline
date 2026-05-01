@@ -73,9 +73,10 @@ export default function Profile() {
     try {
       // Image Compression Options
       const options = {
-        maxSizeMB: 0.2, // Compress to ~200KB
-        maxWidthOrHeight: 512, // Sufficient for profile pics
+        maxSizeMB: 0.1, // Faster compression, smaller file
+        maxWidthOrHeight: 256, // Sufficient for thumbnails
         useWebWorker: true,
+        initialQuality: 0.6, // Favor speed
       };
 
       console.log(`Original file size: ${file.size / 1024 / 1024} MB`);

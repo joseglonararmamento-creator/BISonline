@@ -611,18 +611,6 @@ export default function Chat() {
                             </button>
                           </div>
                           
-                          {/* Fallback for mobile discovery when there are no reactions */}
-                          {!m.reactions || Object.keys(m.reactions).length === 0 && (
-                            <div className="md:hidden mt-1 px-1">
-                              <button 
-                                onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)}
-                                className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-indigo-400 flex items-center gap-1"
-                              >
-                                <Smile size={10} /> React
-                              </button>
-                            </div>
-                          )}
-
                           <AnimatePresence>
                             {showReactionPicker === m.id && (
                               <>
@@ -654,15 +642,25 @@ export default function Chat() {
                           </AnimatePresence>
                         </div>
 
-                        <div className={`flex items-center gap-2 mt-1.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-                          <span className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">
-                            {m.createdAt ? format(m.createdAt.toDate(), 'h:mm a') : 'Sending...'}
-                          </span>
-                          {isMine && m.createdAt && (
-                            <span className={`text-[9px] font-black uppercase tracking-tighter transition-colors ${isMessageRead(m) ? 'text-emerald-500' : 'text-slate-300'}`}>
-                              {isMessageRead(m) ? 'Seen' : 'Delivered'}
+                        <div className={`flex items-center gap-3 mt-1.5 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                          <div className={`flex items-center gap-2 ${isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                            <span className="text-[9px] text-slate-400 uppercase font-black tracking-tighter">
+                              {m.createdAt ? format(m.createdAt.toDate(), 'h:mm a') : 'Sending...'}
                             </span>
-                          )}
+                            {isMine && m.createdAt && (
+                              <span className={`text-[9px] font-black uppercase tracking-tighter transition-colors ${isMessageRead(m) ? 'text-emerald-500' : 'text-slate-300'}`}>
+                                {isMessageRead(m) ? 'Seen' : 'Delivered'}
+                              </span>
+                            )}
+                          </div>
+
+                          <button 
+                            onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)}
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-slate-100 transition-all ${showReactionPicker === m.id ? 'bg-indigo-50 text-indigo-600' : 'text-slate-300 hover:text-indigo-600'}`}
+                          >
+                            <Smile size={10} />
+                            <span className="text-[8px] font-black uppercase tracking-widest">React</span>
+                          </button>
                         </div>
                       </div>
                     </div>
