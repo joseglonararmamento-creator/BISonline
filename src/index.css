@@ -1,2 +1,21 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+@layer base {
+  html, body {
+    @apply antialiased overflow-x-hidden;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    overscroll-behavior-y: none;
+  }
+
+  /* Allow text selection in specific areas like lessons/inputs */
+  input, textarea, [contenteditable="true"], .markdown-body {
+    user-select: text;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
