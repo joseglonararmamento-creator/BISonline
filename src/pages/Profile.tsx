@@ -286,6 +286,44 @@ export default function Profile() {
     }
   };
 
+  const [editMode, setEditMode] = useState(false);
+  const [editedProfile, setEditedProfile] = useState({
+    displayName: profile?.displayName || '',
+    subjectHandled: profile?.subjectHandled || '',
+    yearsOfTeaching: profile?.yearsOfTeaching || '',
+    gender: profile?.gender || '',
+    bio: profile?.bio || ''
+  });
+
+  useEffect(() => {
+    if (profile) {
+      setEditedProfile({
+        displayName: profile.displayName || '',
+        subjectHandled: profile.subjectHandled || '',
+        yearsOfTeaching: profile.yearsOfTeaching || '',
+        gender: profile.gender || '',
+        bio: profile.bio || ''
+      });
+    }
+  }, [profile]);
+
+  const handleUpdateProfile = async () => {
+    if (!profile || !isOnline) return;
+    setUpdating(true);
+    try {
+      await updateDoc(doc(db, 'users', profile.uid), {
+        ...editedProfile
+      });
+      setEditMode(false);
+      alert('Profile updated significantly!');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to update profile.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleUpdatePhoto = async () => {
     if (!profile || !isOnline) return;
     setUpdating(true);
@@ -379,8 +417,11 @@ export default function Profile() {
 
             <div className="mt-4 sm:mt-0 flex gap-2 pb-2">
               {isOwnProfile ? (
-                <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100">
-                  Edit Profile
+                <button 
+                  onClick={() => setEditMode(!editMode)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100"
+                >
+                  {editMode ? 'Cancel Edit' : 'Edit Profile'}
                 </button>
               ) : (
                 <button 
@@ -394,25 +435,112 @@ export default function Profile() {
           </div>
 
           <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
-            <div className="space-y-1 px-2">
-              <h3 className="text-sm font-bold text-slate-900">Bio</h3>
-              <p className="text-sm text-slate-600 leading-relaxed italic">
-                "{profile?.role === 'teacher' 
-                  ? 'Dedicated educator shaping the future of BISonline. Feel free to reach out for support.' 
-                  : 'Student at BISonline passionate about learning and professional development.'}"
-              </p>
-            </div>
+            {editMode ? (
+              <div className="space-y-4 px-2">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">Display Name</label>
+                  <input 
+                    type="text"
+                    value={editedProfile.displayName}
+                    onChange={e => setEditedProfile({...editedProfile, displayName: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-600/20"
+                  />
+                </div>
+                {profile?.role === 'teacher' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">Subject</label>
+                      <input 
+                        type="text"
+                        value={editedProfile.subjectHandled}
+                        onChange={e => setEditedProfile({...editedProfile, subjectHandled: e.target.value})}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                        placeholder="e.g. Physics"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">Years</label>
+                      <input 
+                        type="number"
+                        value={editedProfile.yearsOfTeaching}
+                        onChange={e => setEditedProfile({...editedProfile, yearsOfTeaching: e.target.value})}
+                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                        placeholder="5"
+                      />
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">Gender</label>
+                  <select 
+                    value={editedProfile.gender}
+                    onChange={e => setEditedProfile({...editedProfile, gender: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm"
+                  >
+                    <option value="">Select</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1 block">Bio / Summary</label>
+                  <textarea 
+                    value={editedProfile.bio}
+                    onChange={e => setEditedProfile({...editedProfile, bio: e.target.value})}
+                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm h-24"
+                  />
+                </div>
+                <button 
+                  onClick={handleUpdateProfile}
+                  disabled={updating}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100"
+                >
+                  {updating ? 'Saving...' : 'Save Profile Changes'}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4 px-2">
+                <div className="space-y-1">
+                  <h3 className="text-sm font-bold text-slate-900">Bio</h3>
+                  <p className="text-sm text-slate-600 leading-relaxed italic">
+                    "{profile?.bio || (profile?.role === 'teacher' 
+                      ? 'Dedicated educator shaping the future of BISonline. Feel free to reach out for support.' 
+                      : 'Student at BISonline passionate about learning and professional development.')}"
+                  </p>
+                </div>
 
-            <div className="flex flex-wrap gap-4 px-2">
-              <div className="flex items-center gap-2 text-slate-500">
-                <Mail size={16} />
-                <span className="text-sm truncate max-w-[200px]">{profile?.email}</span>
+                <div className="grid grid-cols-2 gap-4">
+                  {profile?.role === 'teacher' && (
+                    <>
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Subject</p>
+                        <p className="text-sm font-bold text-slate-800">{profile.subjectHandled || 'Not set'}</p>
+                      </div>
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Experience</p>
+                        <p className="text-sm font-bold text-slate-800">{profile.yearsOfTeaching || '0'} Years</p>
+                      </div>
+                    </>
+                  )}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Gender</p>
+                    <p className="text-sm font-bold text-slate-800">{profile?.gender || 'Not specified'}</p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 pt-2">
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Mail size={16} />
+                    <span className="text-sm truncate max-w-[200px]">{profile?.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-500">
+                    <Users size={16} />
+                    <span className="text-sm">Community Member</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2 text-slate-500">
-                <Users size={16} />
-                <span className="text-sm">24 Classmates</span>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>

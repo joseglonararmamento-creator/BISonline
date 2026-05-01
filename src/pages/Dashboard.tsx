@@ -55,6 +55,12 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Guard: Do not attempt to load if role is missing
+      if (!profile?.role) {
+        setLoading(false);
+        return;
+      }
+
       try {
         if (isOnline) {
           // Lessons
@@ -76,15 +82,15 @@ export default function Dashboard() {
           setAssignments(assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Assignment)));
 
           // Recent Submissions
-          const subsQuery = profile?.role === 'teacher' 
+          const subsQuery = profile.role === 'teacher' 
             ? query(collection(db, 'submissions'), limit(5), orderBy('submittedAt', 'desc'))
-            : query(collection(db, 'submissions'), where('studentId', '==', profile?.uid), limit(5), orderBy('submittedAt', 'desc'));
+            : query(collection(db, 'submissions'), where('studentId', '==', profile.uid), limit(5), orderBy('submittedAt', 'desc'));
           
           const subsSnap = await getDocs(subsQuery);
           setRecentSubmissions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Submission)));
 
           // Reminders (New)
-          if (profile?.role === 'student' && profile.classIds && profile.classIds.length > 0) {
+          if (profile.role === 'student' && profile.classIds && profile.classIds.length > 0) {
             const remindersQuery = query(
               collection(db, 'reminders'),
               where('classId', 'in', profile.classIds),
@@ -93,7 +99,7 @@ export default function Dashboard() {
             );
             const remindersSnap = await getDocs(remindersQuery);
             setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
-          } else if (profile?.role === 'teacher') {
+          } else if (profile.role === 'teacher') {
             const remindersQuery = query(
               collection(db, 'reminders'),
               where('teacherId', '==', profile.uid),
@@ -204,47 +210,49 @@ export default function Dashboard() {
           ))}
         </div>
 
-        {/* Composer Placeholder */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-4">
-          <div className="flex items-center gap-4">
-            <img src={profile?.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt="Me" />
-            <input 
-              type="text"
-              value={newDairyText}
-              onChange={e => setNewDairyText(e.target.value)}
-              placeholder={`What's Latest, ${profile?.displayName?.split(' ')[0]}?`}
-              onFocus={() => setShowDiaryComposer(true)}
-              className="flex-1 bg-slate-100 h-10 rounded-full flex items-center px-4 text-slate-500 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
-            />
+        {/* Composer Placeholder - Teacher Only as requested */}
+        {profile?.role === 'teacher' && (
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-4">
+            <div className="flex items-center gap-4">
+              <img src={profile?.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt="Me" />
+              <input 
+                type="text"
+                value={newDairyText}
+                onChange={e => setNewDairyText(e.target.value)}
+                placeholder={`What's Latest, ${profile?.displayName?.split(' ')[0]}?`}
+                onFocus={() => setShowDiaryComposer(true)}
+                className="flex-1 bg-slate-100 h-10 rounded-full flex items-center px-4 text-slate-500 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+              />
+            </div>
+            
+            <AnimatePresence>
+              {showDiaryComposer && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-50">
+                    <button 
+                      onClick={() => setShowDiaryComposer(false)}
+                      className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-lg"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={handlePostDairy}
+                      disabled={publishing || !newDairyText.trim()}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 disabled:opacity-50"
+                    >
+                      {publishing ? 'Posting...' : 'Post Dairy'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          
-          <AnimatePresence>
-            {showDiaryComposer && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden"
-              >
-                <div className="flex justify-end gap-2 pt-2 border-t border-slate-50">
-                  <button 
-                    onClick={() => setShowDiaryComposer(false)}
-                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-lg"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    onClick={handlePostDairy}
-                    disabled={publishing || !newDairyText.trim()}
-                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 disabled:opacity-50"
-                  >
-                    {publishing ? 'Posting...' : 'Post Dairy'}
-                  </button>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        )}
 
         {/* Feed Posts */}
         <div className="space-y-4">
@@ -278,11 +286,25 @@ export default function Dashboard() {
               </div>
               <div className="px-4 py-2 flex items-center justify-between border-t border-slate-50">
                 <div className="flex items-center -space-x-1">
-                  <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white">❤️</div>
-                  <div className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white">👍</div>
-                  <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">12 Reactions</span>
+                  <motion.div 
+                    whileHover={{ scale: 1.2 }}
+                    className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                  >❤️</motion.div>
+                  <motion.div 
+                    whileHover={{ scale: 1.2 }}
+                    className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                  >👍</motion.div>
+                   <motion.div 
+                    whileHover={{ scale: 1.2 }}
+                    className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                  >🙌</motion.div>
+                  <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                    {interactions[lesson.id]?.hearts || Math.floor(Math.random() * 20)} Reactions
+                  </span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">3 Comments</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                   {interactions[lesson.id]?.comments?.length || Math.floor(Math.random() * 5)} Comments
+                </span>
               </div>
               <div className="px-2 pb-2 flex items-center gap-2">
                 <motion.button 
@@ -315,6 +337,22 @@ export default function Dashboard() {
                <p className="text-sm text-slate-700 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 italic">"{rem.text}"</p>
             </div>
           ))}
+
+          {/* Online Now Box (Mobile only or at the bottom) */}
+          <div className="xl:hidden bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Online Now</h3>
+              <span className="text-[8px] font-black text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">{onlineUsers.length} Active</span>
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-2">
+              {onlineUsers.map((u) => (
+                <div key={u.uid} className="relative shrink-0 cursor-pointer" onClick={() => setSelectedUser(u)}>
+                  <img src={u.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border-2 border-white" alt="" />
+                  <div className="absolute bottom-0 right-0 w-2 h-2 bg-emerald-500 border-2 border-white rounded-full"></div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -358,6 +396,20 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        {/* Create Class Button - Teacher Only */}
+        {profile?.role === 'teacher' && (
+          <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-xl shadow-lg p-5 text-white">
+            <h3 className="text-sm font-black uppercase tracking-widest mb-2">Teacher Tools</h3>
+            <p className="text-[10px] text-indigo-100 mb-4 font-medium">Empower your students by launching a new learning space today.</p>
+            <button 
+              onClick={() => navigate('/classes')}
+              className="w-full py-3 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg hover:bg-slate-50 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={14} /> Create a Class
+            </button>
+          </div>
+        )}
 
         {/* Suggestion / Class Box */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">

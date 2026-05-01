@@ -191,69 +191,117 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [onboardingRole, setOnboardingRole] = useState<UserRole>('student');
   const [onboardingInvite, setOnboardingInvite] = useState('');
 
-  if (loading) return (
-    <div className="h-screen flex items-center justify-center bg-slate-50">
+  const [dismissLoader, setDismissLoader] = useState(false);
+
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        setDismissLoader(true);
+      }, 3000);
+      return () => clearTimeout(timer);
+    } else {
+      setDismissLoader(false);
+    }
+  }, [loading]);
+
+  if (loading && !dismissLoader) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 z-[9999]">
       <motion.div 
         animate={{ rotate: 360 }}
         transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-        className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full"
+        className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full mb-4"
       />
+      <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Initializing BISonline...</p>
+      <button 
+        onClick={() => setDismissLoader(true)}
+        className="mt-8 text-[10px] font-black text-slate-300 hover:text-indigo-600 transition-all uppercase tracking-[0.2em] flex items-center gap-2"
+      >
+        <X size={14} /> Bypass Loading
+      </button>
     </div>
   );
   
   if (!user) return <Navigate to="/login" />;
 
-  // Onboarding UI if profile doesn't exist
-  if (!profile) return (
+  // Onboarding UI if profile doesn't exist or role is missing
+  if (!profile || !profile.role) return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
       <motion.div 
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-100"
       >
-        <h2 className="text-2xl font-black text-slate-900 mb-6">Complete Your Profile</h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Full Name</label>
-            <input 
-              type="text" 
-              value={onboardingName} 
-              onChange={e => setOnboardingName(e.target.value)}
-              className="w-full p-3 bg-slate-50 border rounded-xl"
-              placeholder="Your Name"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1">I am a...</label>
-            <select 
-              value={onboardingRole}
-              onChange={e => setOnboardingRole(e.target.value as UserRole)}
-              className="w-full p-3 bg-slate-50 border rounded-xl"
+        <h2 className="text-2xl font-black text-slate-900 mb-2">Welcome to BISonline</h2>
+        <p className="text-slate-500 text-sm mb-8 font-medium">Please set up your profile to continue.</p>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={() => setOnboardingRole('student')}
+              className={`p-4 rounded-2xl border-2 transition-all text-center flex flex-col items-center gap-3 ${
+                onboardingRole === 'student' 
+                  ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+                  : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'
+              }`}
             >
-              <option value="student">Student</option>
-              <option value="teacher">Teacher</option>
-            </select>
+              <div className={`p-3 rounded-xl ${onboardingRole === 'student' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>
+                <GraduationCap size={24} />
+              </div>
+              <span className={`text-xs font-black uppercase tracking-widest ${onboardingRole === 'student' ? 'text-indigo-600' : 'text-slate-400'}`}>Student</span>
+            </button>
+
+            <button 
+              onClick={() => setOnboardingRole('teacher')}
+              className={`p-4 rounded-2xl border-2 transition-all text-center flex flex-col items-center gap-3 ${
+                onboardingRole === 'teacher' 
+                  ? 'border-indigo-600 bg-indigo-50/50 shadow-lg shadow-indigo-100' 
+                  : 'border-slate-100 hover:border-slate-200 bg-slate-50/50'
+              }`}
+            >
+              <div className={`p-3 rounded-xl ${onboardingRole === 'teacher' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-400'}`}>
+                <User size={24} />
+              </div>
+              <span className={`text-xs font-black uppercase tracking-widest ${onboardingRole === 'teacher' ? 'text-indigo-600' : 'text-slate-400'}`}>Teacher</span>
+            </button>
           </div>
-          {onboardingRole === 'student' && (
-            <div>
-              <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Class Invite Code (Optional)</label>
-              <input 
-                type="text" 
-                value={onboardingInvite}
-                onChange={e => setOnboardingInvite(e.target.value)}
-                placeholder="ABCDEF"
-                className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono uppercase"
-              />
-              <p className="mt-1 text-[10px] text-slate-400 italic">Ask your teacher for the 6-digit code.</p>
-            </div>
-          )}
+
+          <div className="space-y-4">
+            {!profile?.displayName && (
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Display Name</label>
+                <input 
+                  type="text" 
+                  value={onboardingName} 
+                  onChange={e => setOnboardingName(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-medium text-slate-700"
+                  placeholder="Enter your name"
+                />
+              </div>
+            )}
+            
+            {onboardingRole === 'student' && (
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Class Invite Code</label>
+                <input 
+                  type="text" 
+                  value={onboardingInvite}
+                  onChange={e => setOnboardingInvite(e.target.value)}
+                  placeholder="CODE123"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-600/20 transition-all font-mono uppercase text-center text-lg tracking-widest"
+                />
+                <p className="mt-2 text-[10px] text-slate-400 font-bold uppercase tracking-tight text-center">Ask your teacher for the 6-digit code.</p>
+              </div>
+            )}
+          </div>
+
           <button 
             onClick={() => {
-               completeOnboarding(onboardingName, onboardingRole, onboardingRole === 'student' ? onboardingInvite : undefined);
+               completeOnboarding(onboardingName || profile?.displayName || '', onboardingRole, onboardingRole === 'student' ? onboardingInvite : undefined);
             }}
-            className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-sm shadow-xl shadow-indigo-100 hover:bg-indigo-700 mt-4"
+            disabled={!onboardingRole || (!onboardingName && !profile?.displayName)}
+            className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 mt-4 active:scale-95"
           >
-            Start Learning
+            Finalize My Account
           </button>
         </div>
       </motion.div>

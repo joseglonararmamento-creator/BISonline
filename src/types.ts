@@ -11,6 +11,10 @@ export interface UserProfile {
   classIds?: string[]; // New: Multiple classes
   isOnline?: boolean;
   lastActive?: any;
+  subjectHandled?: string;
+  yearsOfTeaching?: string;
+  gender?: string;
+  bio?: string;
   createdAt: any;
 }
 
