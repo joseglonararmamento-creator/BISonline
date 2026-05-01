@@ -14,6 +14,7 @@ import {
   Image as ImageIcon, 
   Smile, 
   Users,
+  Plus,
   StopCircle,
   Play,
   Pause,
@@ -572,49 +573,83 @@ export default function Chat() {
 
                             {/* Reactions display */}
                             {m.reactions && Object.keys(m.reactions).length > 0 && (
-                              <div className={`absolute -bottom-3 ${isMine ? 'right-0' : 'left-0'} flex gap-1`}>
-                                {Object.entries(m.reactions).map(([emoji, users]) => (
-                                  <button 
-                                    key={emoji}
-                                    onClick={() => handleAddReaction(m.id, emoji)}
-                                    className={`px-1.5 py-0.5 bg-white border border-slate-100 rounded-full shadow-sm text-xs flex items-center gap-1 hover:scale-110 transition-transform ${users.includes(profile?.uid || '') ? 'ring-1 ring-indigo-500' : ''}`}
-                                  >
-                                    <span>{emoji}</span>
-                                    <span className="text-[10px] font-bold text-slate-500">{users.length}</span>
-                                  </button>
-                                ))}
+                              <div className={`absolute -bottom-4 ${isMine ? 'right-0' : 'left-0'} flex flex-wrap gap-1 z-10`}>
+                                {Object.entries(m.reactions).map(([emoji, userList]) => {
+                                  const hasReacted = userList.includes(profile?.uid || '');
+                                  return (
+                                    <button 
+                                      key={emoji}
+                                      onClick={() => handleAddReaction(m.id, emoji)}
+                                      className={`px-2 py-0.5 bg-white border rounded-full shadow-sm text-xs flex items-center gap-1.5 hover:scale-105 transition-all active:scale-95 ${
+                                        hasReacted 
+                                          ? 'border-indigo-200 bg-indigo-50/50 text-indigo-700 font-bold' 
+                                          : 'border-slate-100 text-slate-500 hover:border-slate-200'
+                                      }`}
+                                    >
+                                      <span className="text-[14px]">{emoji}</span>
+                                      <span className="text-[10px] tabular-nums">{userList.length}</span>
+                                    </button>
+                                  );
+                                })}
+                                <button 
+                                  onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)}
+                                  className="w-6 h-6 flex items-center justify-center bg-white border border-slate-100 rounded-full shadow-sm text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                >
+                                  <Plus size={10} />
+                                </button>
                               </div>
                             )}
                           </div>
                           
-                          {/* Reaction hover button */}
-                          <div className={`absolute -top-4 opacity-0 group-hover:opacity-100 transition-all ${isMine ? 'left-0 -translate-x-full pr-2' : 'right-0 translate-x-full pl-2'}`}>
+                          {/* Reaction hover button (Visible on hover for desktop, always visible for mobile if no reactions) */}
+                          <div className={`absolute ${isMine ? '-left-10' : '-right-10'} top-1/2 -translate-y-1/2 flex items-center gap-2 opacity-0 group-hover:opacity-100 md:opacity-0 transition-opacity duration-200`}>
                             <button 
                               onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)}
-                              className="p-1.5 bg-white border border-slate-100 rounded-full shadow-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                              className="p-1.5 bg-white border border-slate-100 rounded-full shadow-md text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 active:scale-90 transition-all"
                             >
-                              <Smile size={16} />
+                              <Smile size={14} />
                             </button>
                           </div>
+                          
+                          {/* Fallback for mobile discovery when there are no reactions */}
+                          {!m.reactions || Object.keys(m.reactions).length === 0 && (
+                            <div className="md:hidden mt-1 px-1">
+                              <button 
+                                onClick={() => setShowReactionPicker(showReactionPicker === m.id ? null : m.id)}
+                                className="text-[9px] font-black uppercase tracking-widest text-slate-300 hover:text-indigo-400 flex items-center gap-1"
+                              >
+                                <Smile size={10} /> React
+                              </button>
+                            </div>
+                          )}
 
                           <AnimatePresence>
                             {showReactionPicker === m.id && (
-                              <motion.div 
-                                initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                                className={`absolute z-20 bottom-full mb-2 p-1.5 bg-white border border-slate-100 rounded-2xl shadow-2xl flex gap-1 ${isMine ? 'right-0' : 'left-0'}`}
-                              >
-                                {emojiList.map(emoji => (
-                                  <button 
-                                    key={emoji}
-                                    onClick={() => handleAddReaction(m.id, emoji)}
-                                    className="p-1.5 hover:bg-slate-50 rounded-lg text-lg transform hover:scale-125 transition-transform"
-                                  >
-                                    {emoji}
-                                  </button>
-                                ))}
-                              </motion.div>
+                              <>
+                                <motion.div 
+                                  initial={{ opacity: 0 }}
+                                  animate={{ opacity: 1 }}
+                                  exit={{ opacity: 0 }}
+                                  onClick={() => setShowReactionPicker(null)}
+                                  className="fixed inset-0 z-30"
+                                />
+                                <motion.div 
+                                  initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                                  className={`absolute z-40 bottom-full mb-3 p-2 bg-white border border-slate-100 rounded-2xl shadow-2xl flex gap-1.5 items-center ${isMine ? 'right-0' : 'left-0'} ring-1 ring-black/5`}
+                                >
+                                  {emojiList.map(emoji => (
+                                    <button 
+                                      key={emoji}
+                                      onClick={() => handleAddReaction(m.id, emoji)}
+                                      className="w-9 h-9 flex items-center justify-center hover:bg-indigo-50 rounded-xl transition-all hover:scale-125 transform active:scale-95"
+                                    >
+                                      <span className="text-xl leading-none">{emoji}</span>
+                                    </button>
+                                  ))}
+                                </motion.div>
+                              </>
                             )}
                           </AnimatePresence>
                         </div>

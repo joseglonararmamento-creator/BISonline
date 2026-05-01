@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, deleteDoc, doc, getDocs } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Quiz } from '../types';
@@ -56,6 +56,7 @@ export default function Lessons() {
   const [newContent, setNewContent] = useState('');
   const [mediaUrl, setMediaUrl] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [attachedFile, setAttachedFile] = useState<{ url: string, name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -144,16 +145,35 @@ export default function Lessons() {
     }
 
     setUploading(true);
+    setUploadProgress(0);
+
     try {
       const storageRef = ref(storage, `lessons/${profile.uid}/${Date.now()}_${file.name}`);
-      const snapshot = await uploadBytes(storageRef, file);
-      const downloadURL = await getDownloadURL(snapshot.ref);
-      setAttachedFile({ url: downloadURL, name: file.name });
+      const uploadTask = uploadBytesResumable(storageRef, file);
+
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        }, 
+        (error) => {
+          console.error('Upload failed:', error);
+          alert(`Failed to upload file: ${error.message}`);
+          setUploading(false);
+          setUploadProgress(0);
+        }, 
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          setAttachedFile({ url: downloadURL, name: file.name });
+          setUploading(false);
+          setUploadProgress(0);
+        }
+      );
     } catch (err: any) {
-      console.error('Upload failed:', err);
-      alert(`Failed to upload file: ${err.message}`);
-    } finally {
+      console.error('Upload process failed:', err);
+      alert(`Failed to start upload: ${err.message}`);
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -470,93 +490,127 @@ export default function Lessons() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl"
+              className="bg-white rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
             >
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white">
-                <h3 className="text-xl font-bold">Create New Lesson</h3>
-                <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-indigo-500 rounded-lg transition-colors">
-                  <X />
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white shrink-0">
+                <h3 className="text-lg font-bold">New Lesson</h3>
+                <button onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-indigo-500 rounded-lg transition-colors">
+                  <X size={20} />
                 </button>
               </div>
 
-              <form onSubmit={handleAddLesson} className="p-8 space-y-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Lesson Title</label>
-                  <input 
-                    type="text" 
-                    required 
-                    value={newTitle}
-                    onChange={e => setNewTitle(e.target.value)}
-                    placeholder="e.g. Introduction to Quantum Physics"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Content (Markdown Supported)</label>
-                  <textarea 
-                    required 
-                    rows={8}
-                    value={newContent}
-                    onChange={e => setNewContent(e.target.value)}
-                    placeholder="Compose your lesson module here..."
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-600 leading-relaxed font-mono text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Resources (Optional URL)</label>
-                  <input 
-                    type="url" 
-                    value={mediaUrl}
-                    onChange={e => setMediaUrl(e.target.value)}
-                    placeholder="https://example.com/video-or-pdf"
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none mb-4"
-                  />
-                  
-                  <label className="block text-sm font-bold text-slate-700 mb-2 uppercase tracking-wide">Upload Lesson Material (PDF, DOC, PPT)</label>
-                  <div className="flex items-center gap-4">
+              <form onSubmit={handleAddLesson} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Lesson Title</label>
                     <input 
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileUpload}
-                      className="hidden"
-                      accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                      type="text" 
+                      required 
+                      value={newTitle}
+                      onChange={e => setNewTitle(e.target.value)}
+                      placeholder="e.g. Introduction to Calculus"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-sm"
                     />
-                    <button 
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading}
-                      className={`flex-1 py-3 px-4 border-2 border-dashed border-slate-200 rounded-xl flex items-center justify-center gap-2 text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-all ${uploading ? 'opacity-50' : ''}`}
-                    >
-                      <Plus size={20} />
-                      {uploading ? 'Uploading...' : attachedFile ? 'Change File' : 'Select File'}
-                    </button>
-                    {attachedFile && (
-                      <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 px-3 py-1.5 rounded-lg border border-emerald-100 text-xs font-bold">
-                        <CheckCircle2 size={16} />
-                        <span className="truncate max-w-[100px]">{attachedFile.name}</span>
-                        <button type="button" onClick={() => setAttachedFile(null)} className="hover:text-emerald-900">
-                          <X size={14} />
-                        </button>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Content (Markdown Supported)</label>
+                    <textarea 
+                      required 
+                      rows={5}
+                      value={newContent}
+                      onChange={e => setNewContent(e.target.value)}
+                      placeholder="Compose your lesson module here..."
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-600 leading-relaxed font-mono text-xs"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">External Link (Optional)</label>
+                      <input 
+                        type="url" 
+                        value={mediaUrl}
+                        onChange={e => setMediaUrl(e.target.value)}
+                        placeholder="https://youtube.com/..."
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Upload File (PDF, DOC, PPT)</label>
+                      <div className="space-y-3">
+                        <input 
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileUpload}
+                          className="hidden"
+                          accept=".pdf,.doc,.docx,.ppt,.pptx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        />
+                        
+                        {!attachedFile && !uploading ? (
+                          <button 
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="w-full py-4 px-4 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center gap-2 text-slate-400 hover:border-indigo-400 hover:text-indigo-600 transition-all group"
+                          >
+                            <div className="p-3 bg-slate-50 rounded-full group-hover:bg-indigo-50 transition-colors">
+                              <Plus size={24} />
+                            </div>
+                            <span className="text-xs font-black uppercase tracking-widest">Select Material</span>
+                          </button>
+                        ) : uploading ? (
+                          <div className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Uploading...</span>
+                              <span className="text-[10px] font-black text-indigo-600">{Math.round(uploadProgress)}%</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                              <motion.div 
+                                className="h-full bg-indigo-600"
+                                initial={{ width: 0 }}
+                                animate={{ width: `${uploadProgress}%` }}
+                                transition={{ duration: 0.1 }}
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-emerald-600 shadow-sm shrink-0">
+                              <CheckCircle2 size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-emerald-900 truncate">{attachedFile!.name}</p>
+                              <p className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">Ready to publish</p>
+                            </div>
+                            <button 
+                              type="button" 
+                              onClick={() => setAttachedFile(null)}
+                              className="p-2 hover:bg-emerald-100 rounded-lg text-emerald-600 transition-colors shrink-0"
+                              title="Remove File"
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="pt-4 flex gap-3">
+                <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
                   <button 
                     type="button" 
                     onClick={() => setShowAddModal(false)}
-                    className="flex-1 py-3.5 border border-slate-200 text-slate-600 font-bold rounded-2xl hover:bg-slate-50 transition-colors"
+                    className="flex-1 py-2.5 text-slate-500 text-xs font-black uppercase tracking-widest hover:text-slate-700 transition-colors"
                   >
                     Cancel
                   </button>
                   <button 
                     type="submit" 
-                    className="flex-1 py-3.5 bg-indigo-600 text-white font-bold rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"
+                    className="flex-[2] py-2.5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-[0.98]"
                   >
-                    Publish Lesson
+                    Publish Module
                   </button>
                 </div>
               </form>

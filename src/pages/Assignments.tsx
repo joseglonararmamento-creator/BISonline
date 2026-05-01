@@ -15,7 +15,8 @@ import {
   FileUp,
   Trash2,
   Search,
-  ChevronLeft
+  ChevronLeft,
+  X
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -406,27 +407,68 @@ export default function Assignments() {
         {showAddModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
             <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-3xl w-full max-w-lg p-8 shadow-2xl"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
             >
-              <h3 className="text-2xl font-bold text-slate-900 mb-6">Create New Assignment</h3>
-              <form onSubmit={handleAddAssignment} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Title</label>
-                  <input type="text" required value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
+              <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white shrink-0">
+                <h3 className="text-lg font-black uppercase tracking-widest">New Assignment</h3>
+                <button onClick={() => setShowAddModal(false)} className="p-1.5 hover:bg-indigo-500 rounded-lg transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleAddAssignment} className="flex flex-col flex-1 overflow-hidden">
+                <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Assignment Title</label>
+                    <input 
+                      type="text" 
+                      required 
+                      value={newTitle} 
+                      onChange={e => setNewTitle(e.target.value)} 
+                      placeholder="e.g. Final Design Project"
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm font-medium" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Instructions</label>
+                    <textarea 
+                      rows={5} 
+                      required 
+                      value={newDesc} 
+                      onChange={e => setNewDesc(e.target.value)} 
+                      placeholder="Specify deliverables and requirements..."
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-xs leading-relaxed" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Submission Deadline</label>
+                    <input 
+                      type="datetime-local" 
+                      required 
+                      value={newDeadline} 
+                      onChange={e => setNewDeadline(e.target.value)} 
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-sm" 
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Instructions</label>
-                  <textarea rows={4} required value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Deadline</label>
-                  <input type="datetime-local" required value={newDeadline} onChange={e => setNewDeadline(e.target.value)} className="w-full p-3 bg-slate-50 border rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
-                </div>
-                <div className="pt-4 flex gap-3">
-                  <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 py-3 text-slate-600 font-bold">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold shadow-lg shadow-indigo-100">Post Assignment</button>
+
+                <div className="p-5 border-t border-slate-100 bg-slate-50 flex gap-3 shrink-0">
+                  <button 
+                    type="button" 
+                    onClick={() => setShowAddModal(false)} 
+                    className="flex-1 py-2.5 text-slate-500 text-[10px] font-black uppercase tracking-widest hover:text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="flex-[2] py-2.5 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all active:scale-95"
+                  >
+                    Post Assignment
+                  </button>
                 </div>
               </form>
             </motion.div>
