@@ -51,7 +51,15 @@ export default function Profile() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !profile || !storage) return;
+    if (!profile) {
+      alert('You must be logged in to upload a profile picture.');
+      return;
+    }
+    if (!storage) {
+      alert('Cloud Storage is not enabled for this project. Please check your Firebase console.');
+      return;
+    }
+    if (!file) return;
 
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file.');
@@ -71,9 +79,15 @@ export default function Profile() {
       setNewPhotoURL(downloadURL);
       alert('Profile picture uploaded successfully!');
       window.location.reload();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Upload failed:', err);
-      alert('Failed to upload image. Please check your storage permissions.');
+      if (err.code === 'storage/unauthorized') {
+        alert('Upload failed: You do not have permission to upload files. Please check Storage Rules.');
+      } else if (err.code === 'storage/retry-limit-exceeded') {
+        alert('Upload failed: Operation timed out. Check your internet connection.');
+      } else {
+        alert(`Failed to upload image: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setUploading(false);
     }
