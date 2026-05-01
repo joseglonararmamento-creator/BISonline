@@ -9,7 +9,6 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
-    overscroll-behavior-y: none;
   }
 
   /* Allow text selection in specific areas like lessons/inputs */

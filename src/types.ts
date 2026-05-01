@@ -47,6 +47,16 @@ export interface Lesson {
   createdAt: any;
 }
 
+export interface Post {
+  id: string;
+  authorId: string;
+  authorName: string;
+  photoURL: string | null;
+  text: string;
+  createdAt: any;
+  likes?: number;
+}
+
 export interface Assignment {
   id: string;
   lessonId: string;

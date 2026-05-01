@@ -308,17 +308,37 @@ export default function Profile() {
   }, [profile]);
 
   const handleUpdateProfile = async () => {
-    if (!profile || !isOnline) return;
+    if (!profile || !isOnline) {
+      alert('Cannot update profile while offline or not logged in.');
+      return;
+    }
+    
     setUpdating(true);
     try {
-      await updateDoc(doc(db, 'users', profile.uid), {
-        ...editedProfile
+      // Ensure we're targeting the CURRENT user's UID
+      const userRef = doc(db, 'users', profile.uid);
+      
+      console.log('Updating profile for UID:', profile.uid, 'with data:', editedProfile);
+      
+      await updateDoc(userRef, {
+        displayName: editedProfile.displayName,
+        subjectHandled: editedProfile.subjectHandled,
+        yearsOfTeaching: editedProfile.yearsOfTeaching,
+        gender: editedProfile.gender,
+        bio: editedProfile.bio,
+        updatedAt: serverTimestamp()
       });
+      
       setEditMode(false);
-      alert('Profile updated significantly!');
-    } catch (err) {
-      console.error(err);
-      alert('Failed to update profile.');
+      alert('Profile updated successfully!');
+    } catch (err: any) {
+      console.error('Error updating profile:', err);
+      // More specific error message
+      if (err.code === 'permission-denied') {
+        alert('Permission denied. Please ensure you are logged in and authorized.');
+      } else {
+        alert(`Failed to update profile: ${err.message || 'Unknown error'}`);
+      }
     } finally {
       setUpdating(false);
     }

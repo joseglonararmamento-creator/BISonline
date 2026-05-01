@@ -98,6 +98,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       }
     },
+    "Post": {
+      "title": "Post",
+      "description": "User status updates and feed posts",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "likes": { "type": "number" }
+      },
+      "required": ["authorId", "authorName", "text"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "In-app alerts",
@@ -133,6 +147,7 @@
     "notifications": { "schema": "Notification", "description": "User notifications" },
     "calendarEvents": { "schema": "CalendarEvent", "description": "Shared calendar dates" },
     "reminders": { "schema": "Reminder", "description": "Teacher status updates and class reminders" },
-    "classes": { "schema": "Class", "description": "Classroom groups" }
+    "classes": { "schema": "Class", "description": "Classroom groups" },
+    "posts": { "schema": "Post", "description": "User status updates" }
   }
 }
