@@ -1,0 +1,125 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isTeacher() {
+      return isSignedIn() && getUserData().role == 'teacher';
+    }
+
+    function isStudent() {
+      return isSignedIn() && getUserData().role == 'student';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validations ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid 
+        && data.email is string && data.email.size() > 0 
+        && data.role in ['teacher', 'student'];
+    }
+
+    function isValidLesson(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 500
+        && data.content is string && data.content.size() > 0
+        && data.teacherId == request.auth.uid;
+    }
+
+    function isValidAssignment(data) {
+      return data.title is string && data.title.size() > 0
+        && data.deadline is timestamp
+        && data.teacherId == request.auth.uid;
+    }
+
+    function isValidSubmission(data) {
+      return data.assignmentId is string 
+        && data.studentId == request.auth.uid
+        && data.status == 'submitted';
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isTeacher();
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL']);
+    }
+
+    match /lessons/{lessonId} {
+      allow read: if isSignedIn();
+      allow create: if isTeacher() && isValidLesson(incoming());
+      allow update: if isTeacher() && existing().teacherId == request.auth.uid && isValidLesson(incoming());
+      allow delete: if isTeacher() && existing().teacherId == request.auth.uid;
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow create: if isTeacher() && isValidAssignment(incoming());
+      allow update: if isTeacher() && existing().teacherId == request.auth.uid && isValidAssignment(incoming());
+      allow delete: if isTeacher() && existing().teacherId == request.auth.uid;
+    }
+
+    match /submissions/{submissionId} {
+      allow get: if isSignedIn() && (isOwner(existing().studentId) || isTeacher());
+      allow list: if isSignedIn() && (isTeacher() || (isStudent() && resource.data.studentId == request.auth.uid));
+      allow create: if isStudent() && isValidSubmission(incoming());
+      allow update: if isTeacher() 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['grade', 'feedback', 'status']);
+    }
+
+    match /quizzes/{quizId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isTeacher();
+    }
+
+    match /quizAttempts/{attemptId} {
+      allow read: if isSignedIn() && (isOwner(existing().studentId) || isTeacher());
+      allow create: if isStudent() && incoming().studentId == request.auth.uid;
+    }
+
+    match /messages/{messageId} {
+      allow read: if isSignedIn() && (isOwner(existing().senderId) || isOwner(existing().receiverId));
+      allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if isOwner(existing().userId);
+      allow create: if isSignedIn(); // System or sender can create
+      allow update: if isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+    }
+
+    match /calendarEvents/{eventId} {
+      allow read: if isSignedIn();
+      allow write: if isTeacher();
+    }
+  }
+}

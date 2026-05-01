@@ -1,0 +1,6 @@
+{
+  "name": "BISonline",
+  "description": "A collaborative online learning platform for students and teachers with multi-class support and real-time communication.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": []
+}
