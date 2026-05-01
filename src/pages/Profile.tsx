@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useAuth } from '../App';
-import { Assignment, Submission, Class, Reminder } from '../types';
+import { useAuth } from '../contexts/AuthContext';
+import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   User, 
@@ -81,6 +81,11 @@ export default function Profile() {
 
     const fetchData = async () => {
       try {
+        if (!profile) {
+            setLoading(false);
+            return;
+        }
+
         if (profile.role === 'student') {
           const assignmentsSnap = await getDocs(collection(db, 'assignments'));
           const allAssignments = assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Assignment));
@@ -91,9 +96,13 @@ export default function Profile() {
           setSubmissions(submissionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Submission)));
 
           if (profile.classIds && profile.classIds.length > 0) {
-            const classesQuery = query(collection(db, 'classes'), where('__name__', 'in', profile.classIds));
-            const cSnap = await getDocs(classesQuery);
-            setStudentClasses(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
+            try {
+                const classesQuery = query(collection(db, 'classes'), where('__name__', 'in', profile.classIds));
+                const cSnap = await getDocs(classesQuery);
+                setStudentClasses(cSnap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
+            } catch (err) {
+                console.warn("Could not fetch student classes:", err);
+            }
           }
         } else {
           // Teacher data
@@ -103,18 +112,24 @@ export default function Profile() {
           setClasses(teacherClasses);
           if (teacherClasses.length > 0) setSelectedClassId(teacherClasses[0].id);
 
-          const remindersQuery = query(
-            collection(db, 'reminders'), 
-            where('teacherId', '==', profile.uid),
-            orderBy('createdAt', 'desc'),
-            limit(10)
-          );
-          onSnapshot(remindersQuery, (snap) => {
-            setReminders(snap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
-          });
+          try {
+              const remindersQuery = query(
+                collection(db, 'reminders'), 
+                where('teacherId', '==', profile.uid),
+                orderBy('createdAt', 'desc'),
+                limit(10)
+              );
+              onSnapshot(remindersQuery, (snap) => {
+                setReminders(snap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
+              }, (err) => {
+                  console.error("Reminders listener failed:", err);
+              });
+          } catch (err) {
+              console.error("Failed to setup reminders query:", err);
+          }
         }
       } catch (err) {
-        console.error(err);
+        console.error("Profile data fetch error:", err);
       } finally {
         setLoading(false);
       }

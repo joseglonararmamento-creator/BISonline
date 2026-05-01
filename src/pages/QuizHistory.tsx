@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 import { QuizAttempt, Quiz } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';

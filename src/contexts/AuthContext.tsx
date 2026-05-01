@@ -1,0 +1,188 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut,
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  serverTimestamp,
+  getDocFromServer,
+  query,
+  where,
+  collection,
+  getDocs
+} from 'firebase/firestore';
+import { auth, db } from '../firebase';
+import { UserProfile, UserRole } from '../types';
+import localforage from 'localforage';
+
+interface AuthContextType {
+  user: FirebaseUser | null;
+  profile: UserProfile | null;
+  loading: boolean;
+  isOnline: boolean;
+  signIn: () => Promise<void>;
+  logout: () => Promise<void>;
+  completeOnboarding: (displayName: string, role: UserRole, classInviteCode?: string) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | null>(null);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+};
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && (error.message.includes('the client is offline') || error.message.includes('unavailable'))) {
+          console.warn("Firestore is operating in offline mode.");
+        }
+      }
+    };
+    testConnection();
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+          if (userDoc.exists()) {
+            const data = userDoc.data() as UserProfile;
+            setProfile(data);
+          } else {
+            setProfile(null);
+          }
+        } catch (err) {
+          console.error("Error fetching user profile:", err);
+          setProfile(null);
+        }
+
+        // Background Sync for Quiz Attempts
+        if (isOnline) {
+          const pendingAttemptsStore = localforage.createInstance({
+            name: "BISonline",
+            storeName: "pending_quiz_attempts"
+          });
+
+          const sync = async () => {
+            const keys = await pendingAttemptsStore.keys();
+            if (keys.length > 0) {
+              console.log(`Syncing ${keys.length} offline assessment attempts...`);
+              for (const key of keys) {
+                const attempt = await pendingAttemptsStore.getItem<any>(key);
+                if (attempt) {
+                  try {
+                    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
+                    await addDoc(collection(db, 'quizAttempts'), {
+                      ...attempt,
+                      completedAt: serverTimestamp(),
+                      syncedAt: serverTimestamp()
+                    });
+                    await pendingAttemptsStore.removeItem(key);
+                  } catch (err) {
+                    console.error("Sync partial failure:", err);
+                  }
+                }
+              }
+            }
+          };
+          sync();
+        }
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      unsubscribe();
+    };
+  }, [isOnline]);
+
+  const signIn = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err) {
+      console.error("Sign in error:", err);
+    }
+  };
+
+  const completeOnboarding = async (displayName: string, role: UserRole, classInviteCode?: string) => {
+    if (!user) return;
+    
+    let classIds: string[] = [];
+
+    if (role === 'student' && classInviteCode) {
+      try {
+        const q = query(
+          collection(db, 'classes'),
+          where('inviteCode', '==', classInviteCode.toUpperCase())
+        );
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          classIds = [snap.docs[0].id];
+        } else {
+          alert("Invalid invite code. You can join classes later from your profile.");
+        }
+      } catch (err) {
+        console.error("Error checking invite code:", err);
+      }
+    }
+
+    const newProfile: UserProfile = {
+      uid: user.uid,
+      email: user.email || '',
+      displayName,
+      photoURL: user.photoURL,
+      role,
+      classIds,
+      createdAt: serverTimestamp(),
+    };
+    try {
+      await setDoc(doc(db, 'users', user.uid), newProfile);
+      setProfile(newProfile);
+    } catch (err) {
+      console.error("Error saving profile:", err);
+      alert("Failed to save profile. Please try again.");
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Logout error:", err);
+    }
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, profile, loading, isOnline, signIn, logout, completeOnboarding }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};

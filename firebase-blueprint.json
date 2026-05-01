@@ -131,6 +131,8 @@
     "quizAttempts": { "schema": "QuizAttempt", "description": "Results of quizzes" },
     "messages": { "schema": "Message", "description": "Direct messages between users" },
     "notifications": { "schema": "Notification", "description": "User notifications" },
-    "calendarEvents": { "schema": "CalendarEvent", "description": "Shared calendar dates" }
+    "calendarEvents": { "schema": "CalendarEvent", "description": "Shared calendar dates" },
+    "reminders": { "schema": "Reminder", "description": "Teacher status updates and class reminders" },
+    "classes": { "schema": "Class", "description": "Classroom groups" }
   }
 }

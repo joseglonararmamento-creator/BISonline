@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 import { Assignment, Submission } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 

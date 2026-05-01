@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useAuth } from '../App';
+import { useAuth } from '../contexts/AuthContext';
 import { QuizAttempt, Submission, UserProfile, Assignment } from '../types';
 import { motion } from 'motion/react';
 import { 

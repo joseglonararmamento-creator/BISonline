@@ -1,27 +1,9 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut,
-  User as FirebaseUser 
-} from 'firebase/auth';
-import { 
-  doc, 
-  getDoc, 
-  setDoc, 
-  serverTimestamp,
-  getDocFromServer,
-  query,
-  where,
-  collection,
-  getDocs
-} from 'firebase/firestore';
-import { auth, db } from './firebase';
-import { UserProfile, UserRole } from './types';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from './firebase';
+import { UserRole } from './types';
 import { motion, AnimatePresence } from 'motion/react';
-import localforage from 'localforage';
 import { 
   BookOpen, 
   ClipboardList, 
@@ -29,7 +11,6 @@ import {
   MessageSquare, 
   LayoutDashboard, 
   LogOut, 
-  Bell, 
   TrendingUp,
   User,
   GraduationCap,
@@ -41,7 +22,9 @@ import {
   LayoutGrid
 } from 'lucide-react';
 
-// Pages (to be created)
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+
+// Pages
 import Dashboard from './pages/Dashboard';
 import Lessons from './pages/Lessons';
 import Assignments from './pages/Assignments';
@@ -53,151 +36,6 @@ import TeacherInsights from './pages/TeacherInsights';
 import Profile from './pages/Profile';
 import TeacherClasses from './pages/TeacherClasses';
 
-interface AuthContextType {
-  user: FirebaseUser | null;
-  profile: UserProfile | null;
-  loading: boolean;
-  isOnline: boolean;
-  signIn: () => Promise<void>;
-  logout: () => Promise<void>;
-  completeOnboarding: (displayName: string, role: UserRole, classInviteCode?: string) => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | null>(null);
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within an AuthProvider');
-  return context;
-};
-
-const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    const testConnection = async () => {
-      try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        if(error instanceof Error && error.message.includes('the client is offline')) {
-          console.error("Please check your Firebase configuration.");
-        }
-      }
-    };
-    testConnection();
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setUser(firebaseUser);
-      if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data() as UserProfile;
-          setProfile(data);
-        } else {
-          setProfile(null);
-        }
-
-        // Background Sync for Quiz Attempts
-        if (isOnline) {
-          const pendingAttemptsStore = localforage.createInstance({
-            name: "BISonline",
-            storeName: "pending_quiz_attempts"
-          });
-
-          const sync = async () => {
-            const keys = await pendingAttemptsStore.keys();
-            if (keys.length > 0) {
-              console.log(`Syncing ${keys.length} offline assessment attempts...`);
-              for (const key of keys) {
-                const attempt = await pendingAttemptsStore.getItem<any>(key);
-                if (attempt) {
-                  try {
-                    const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
-                    await addDoc(collection(db, 'quizAttempts'), {
-                      ...attempt,
-                      completedAt: serverTimestamp(),
-                      syncedAt: serverTimestamp()
-                    });
-                    await pendingAttemptsStore.removeItem(key);
-                  } catch (err) {
-                    console.error("Sync partial failure:", err);
-                  }
-                }
-              }
-            }
-          };
-          sync();
-        }
-      } else {
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      unsubscribe();
-    };
-  }, []);
-
-  const signIn = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-  };
-
-  const completeOnboarding = async (displayName: string, role: UserRole, classInviteCode?: string) => {
-    if (!user) return;
-    
-    let classIds: string[] = [];
-    let classNames: string[] = [];
-
-    if (role === 'student' && classInviteCode) {
-      const q = query(
-        collection(db, 'classes'),
-        where('inviteCode', '==', classInviteCode.toUpperCase())
-      );
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        classIds = [snap.docs[0].id];
-        classNames = [snap.docs[0].data().name];
-      } else {
-        alert("Invalid invite code. You can join classes later from your profile.");
-      }
-    }
-
-    const newProfile: UserProfile = {
-      uid: user.uid,
-      email: user.email || '',
-      displayName,
-      photoURL: user.photoURL,
-      role,
-      classIds,
-      createdAt: serverTimestamp(),
-    };
-    await setDoc(doc(db, 'users', user.uid), newProfile);
-    setProfile(newProfile);
-  };
-
-  const logout = async () => {
-    await signOut(auth);
-  };
-
-  return (
-    <AuthContext.Provider value={{ user, profile, loading, isOnline, signIn, logout, completeOnboarding }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
 
 
 const Sidebar = () => {
