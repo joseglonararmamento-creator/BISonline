@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,15 +21,23 @@ import {
   Megaphone,
   Send,
   MessageSquare,
+  MessageCircle,
   LayoutGrid,
   Bell,
-  Users
+  Users,
+  ChevronLeft
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 
 export default function Profile() {
-  const { profile, isOnline } = useAuth();
+  const { profile: myProfile, isOnline } = useAuth();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const viewUserId = searchParams.get('userId');
+  const [viewProfile, setViewProfile] = useState<UserProfileType | null>(null);
+  const isOwnProfile = !viewUserId || viewUserId === myProfile?.uid;
+  const profile = isOwnProfile ? myProfile : viewProfile;
   
   // Student specific
   const [assignments, setAssignments] = useState<Assignment[]>([]);
@@ -47,9 +55,29 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
-  const [newPhotoURL, setNewPhotoURL] = useState(profile?.photoURL || '');
+  const [newPhotoURL, setNewPhotoURL] = useState('');
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (profile?.photoURL) setNewPhotoURL(profile.photoURL);
+  }, [profile?.photoURL]);
+
+  useEffect(() => {
+    const fetchOtherProfile = async () => {
+      if (viewUserId && viewUserId !== myProfile?.uid) {
+        try {
+          const docSnap = await getDoc(doc(db, 'users', viewUserId));
+          if (docSnap.exists()) {
+            setViewProfile(docSnap.data() as UserProfileType);
+          }
+        } catch (err) {
+          console.error("Error fetching profile:", err);
+        }
+      }
+    };
+    fetchOtherProfile();
+  }, [viewUserId, myProfile?.uid]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -278,441 +306,206 @@ export default function Profile() {
   } : null;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-12">
-      {/* Profile Header */}
-      <div className="relative">
-        <div className="h-48 bg-gradient-to-r from-indigo-600 to-blue-500 rounded-[40px] shadow-lg overflow-hidden">
+    <div className="max-w-xl mx-auto space-y-4 pb-20">
+      {/* Profile Header (Facebook Style) */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+        {/* Cover Photo */}
+        <div className="h-40 bg-gradient-to-r from-indigo-500 to-purple-600 relative overflow-hidden">
           <div className="absolute inset-0 opacity-10 flex flex-wrap gap-4 p-8 overflow-hidden pointer-events-none">
-            {[...Array(20)].map((_, i) => (
-              <BookOpen key={i} size={40} />
+            {[...Array(10)].map((_, i) => (
+              <BookOpen key={i} size={40} className="text-white" />
             ))}
           </div>
+          {isOnline && (
+            <button className="absolute bottom-2 right-2 p-2 bg-black/40 text-white rounded-lg hover:bg-black/60 transition-all">
+              <Camera size={16} />
+            </button>
+          )}
         </div>
-        
-        <div className="absolute -bottom-20 sm:-bottom-16 left-0 right-0 sm:left-8 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 px-4">
-          <div className="relative group shrink-0">
-            <input 
-              type="file" 
-              ref={fileInputRef}
-              onChange={handleFileUpload}
-              className="hidden"
-              accept="image/*"
-            />
-            <div className="relative">
-              <div className="w-36 h-36 p-1 bg-white rounded-[32px] shadow-xl relative">
+
+        {/* Profile Info Overlay Area */}
+        <div className="px-4 pb-6 relative">
+          <div className="flex flex-col items-center -mt-16 sm:flex-row sm:items-end sm:gap-6 sm:px-4">
+            {!isOwnProfile && (
+              <button 
+                onClick={() => navigate(-1)}
+                className="absolute top-4 left-4 p-2 bg-white/20 hover:bg-white/40 text-white rounded-full transition-all"
+              >
+                <ChevronLeft size={20} />
+              </button>
+            )}
+            <div className="relative group shrink-0">
+               <input 
+                type="file" 
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
+                accept="image/*"
+              />
+              <div className="w-32 h-32 p-1.5 bg-white rounded-full shadow-lg relative">
                 <img 
                   src={profile?.photoURL || 'https://via.placeholder.com/150'} 
-                  className={`w-full h-full rounded-[28px] object-cover transition-all duration-500 ${uploading ? 'scale-90 opacity-40 blur-[2px]' : 'group-hover:scale-[1.02]'}`}
+                  className={`w-full h-full rounded-full object-cover transition-all duration-500 ${uploading ? 'scale-90 opacity-40 blur-[2px]' : 'group-hover:opacity-90'}`}
                   alt="Profile"
                 />
-                
-                {/* Upload Hover Overlay */}
-                {isOnline && !uploading && (
+                {!uploading && (
                   <button 
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute inset-1 bg-black/40 backdrop-blur-[2px] rounded-[28px] opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white transition-all duration-300 cursor-pointer overflow-hidden"
+                    className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 rounded-full"
                   >
-                    <motion.div 
-                      initial={{ y: 10, opacity: 0 }}
-                      whileHover={{ y: 0, opacity: 1 }}
-                      className="flex flex-col items-center"
-                    >
-                      <Camera size={28} className="mb-1" />
-                      <span className="text-[10px] font-black uppercase tracking-widest">Change</span>
-                    </motion.div>
+                    <Camera size={24} className="text-white" />
                   </button>
                 )}
-
-                {/* Progress Overlay */}
                 {uploading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-4">
-                    <div className="relative w-20 h-20 flex items-center justify-center">
-                      <svg className="w-full h-full transform -rotate-90">
-                        <circle
-                          cx="40"
-                          cy="40"
-                          r="34"
-                          stroke="currentColor"
-                          strokeWidth="6"
-                          fill="transparent"
-                          className="text-slate-100"
-                        />
-                        <motion.circle
-                          cx="40"
-                          cy="40"
-                          r="34"
-                          stroke="currentColor"
-                          strokeWidth="6"
-                          fill="transparent"
-                          strokeDasharray={213.6}
-                          strokeDashoffset={213.6 - (213.6 * uploadProgress) / 100}
-                          className="text-indigo-600 transition-all duration-500"
-                          strokeLinecap="round"
-                        />
-                      </svg>
-                      <div className="absolute flex flex-col items-center justify-center">
-                        <span className="text-sm font-black text-indigo-700 tracking-tighter">{Math.round(uploadProgress)}%</span>
-                      </div>
-                    </div>
-                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-700 mt-2 animate-pulse">Syncing</p>
+                  <div className="absolute inset-0 bg-white/60 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-black text-indigo-600">{Math.round(uploadProgress)}%</span>
                   </div>
                 )}
               </div>
-              
-              {/* Status Badge */}
-              <div className={`absolute -bottom-1 -right-1 w-6 h-6 border-4 border-white rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} title={isOnline ? 'Online' : 'Offline'}></div>
+            </div>
+
+            <div className="mt-4 sm:mt-0 text-center sm:text-left flex-1 pb-2">
+              <h2 className="text-2xl font-black text-slate-900 tracking-tight">{profile?.displayName}</h2>
+              <p className="text-sm text-slate-500 font-medium">{profile?.role} • Student ID: {profile?.uid?.slice(0, 8)}</p>
+            </div>
+
+            <div className="mt-4 sm:mt-0 flex gap-2 pb-2">
+              {isOwnProfile ? (
+                <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100">
+                  Edit Profile
+                </button>
+              ) : (
+                <button 
+                  onClick={() => navigate(`/chat?userId=${profile?.uid}`)}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-2"
+                >
+                  <MessageCircle size={14} /> Message
+                </button>
+              )}
             </div>
           </div>
-          <div className="pb-0 sm:pb-4 text-center sm:text-left">
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">{profile?.displayName}</h2>
-            <div className="flex items-center justify-center sm:justify-start gap-2 mt-1">
-              <span className={`px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${profile?.role === 'teacher' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                {profile?.role}
-              </span>
-              <span className="text-slate-400 text-xs sm:text-sm flex items-center gap-1">
-                <Mail size={14} /> {profile?.email}
-              </span>
+
+          <div className="mt-6 pt-6 border-t border-slate-100 space-y-4">
+            <div className="space-y-1 px-2">
+              <h3 className="text-sm font-bold text-slate-900">Bio</h3>
+              <p className="text-sm text-slate-600 leading-relaxed italic">
+                "{profile?.role === 'teacher' 
+                  ? 'Dedicated educator shaping the future of BISonline. Feel free to reach out for support.' 
+                  : 'Student at BISonline passionate about learning and professional development.'}"
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-4 px-2">
+              <div className="flex items-center gap-2 text-slate-500">
+                <Mail size={16} />
+                <span className="text-sm truncate max-w-[200px]">{profile?.email}</span>
+              </div>
+              <div className="flex items-center gap-2 text-slate-500">
+                <Users size={16} />
+                <span className="text-sm">24 Classmates</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="pt-24 sm:pt-20 grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Statistics and Info */}
-        <div className="space-y-6">
-          <section className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Account Basics</h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center">
-                  <Hash size={18} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Your ID</p>
-                  <p className="text-[10px] font-bold text-slate-500 font-mono">{profile?.uid}</p>
-                </div>
-              </div>
-              {profile?.role === 'student' && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center">
-                    <LayoutGrid size={18} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Joined Classes</p>
-                    <p className="text-sm font-bold text-slate-700 truncate">
-                      {studentClasses.length > 0 ? studentClasses.map(c => c.name).join(', ') : 'No classes joined'}
-                    </p>
-                  </div>
-                </div>
-              )}
-              {profile?.role === 'teacher' && (
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-slate-50 text-slate-400 rounded-xl flex items-center justify-center">
-                    <LayoutGrid size={18} />
-                  </div>
+      {/* Profile Sidebar/Widgets Area */}
+      <div className="space-y-4">
+        {/* Statistics or Actions */}
+        {profile?.role === 'student' && studentStats && (
+          <section className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+              <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Academic Tracker</h3>
+              <div className="space-y-4">
                   <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Classes Managed</p>
-                    <p className="text-sm font-bold text-slate-700">{classes.length}</p>
+                    <div className="flex justify-between text-xs font-bold mb-2 text-slate-500">
+                      <span>Course Progression</span>
+                      <span>{Math.round(studentStats.progress)}%</span>
+                    </div>
+                    <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${studentStats.progress}%` }}
+                        className="h-full bg-indigo-600 rounded-full"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2">
+                    <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100/50">
+                      <p className="text-[9px] uppercase font-black text-indigo-400 mb-0.5">Finished</p>
+                      <p className="text-xl font-black text-indigo-700">{studentStats.completedCount}</p>
+                    </div>
+                    <div className="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                      <p className="text-[9px] uppercase font-black text-slate-400 mb-0.5">Assigned</p>
+                      <p className="text-xl font-black text-slate-700">{assignments.length}</p>
+                    </div>
+                  </div>
+              </div>
           </section>
+        )}
 
-          {profile?.role === 'student' && (
-            <section className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-sm">
-                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Join New Class</h3>
-                <form onSubmit={handleJoinClass} className="space-y-3">
-                    <input 
-                        type="text" 
-                        value={inviteCode}
-                        onChange={e => setInviteCode(e.target.value)}
-                        placeholder="Enter Invite Code"
-                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-mono uppercase text-sm"
-                    />
-                    <button 
-                        type="submit"
-                        disabled={updating || !inviteCode.trim()}
-                        className="w-full py-3 bg-slate-900 text-white rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-800 disabled:opacity-50 transition-all shadow-lg"
-                    >
-                        {updating ? 'Joining...' : 'Link to Class'}
-                    </button>
-                </form>
-            </section>
-          )}
-
-          {profile?.role === 'student' && studentStats && (
-            <section className="bg-indigo-600 p-8 rounded-[32px] text-white shadow-xl shadow-indigo-100">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <Award size={32} className="text-indigo-200 mb-2" />
-                  <h3 className="text-xl font-bold">Academic Progress</h3>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between text-xs font-bold mb-2">
-                    <span className="uppercase tracking-widest text-indigo-200">Assignment Mastery</span>
-                    <span>{Math.round(studentStats.progress)}%</span>
-                  </div>
-                  <div className="h-3 bg-white/20 rounded-full overflow-hidden">
-                    <motion.div 
-                      initial={{ width: 0 }}
-                      animate={{ width: `${studentStats.progress}%` }}
-                      className="h-full bg-white transition-all"
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 pt-4">
-                  <div className="bg-white/10 p-4 rounded-2xl">
-                    <p className="text-[10px] uppercase font-black text-indigo-200 mb-1">Completed</p>
-                    <p className="text-2xl font-black">{studentStats.completedCount}</p>
-                  </div>
-                  <div className="bg-white/10 p-4 rounded-2xl">
-                    <p className="text-[10px] uppercase font-black text-indigo-200 mb-1">Total</p>
-                    <p className="text-2xl font-black">{assignments.length}</p>
-                  </div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {profile?.role === 'teacher' && (
-            <section className="bg-amber-600 p-8 rounded-[32px] text-white shadow-xl shadow-amber-100">
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <Users size={32} className="text-amber-200 mb-2" />
-                  <h3 className="text-xl font-bold">Class Overview</h3>
-                </div>
-              </div>
-              <div className="space-y-4">
-                <div className="bg-white/10 p-4 rounded-2xl">
-                  <p className="text-[10px] uppercase font-black text-amber-200 mb-1">Total Active Classes</p>
-                  <p className="text-2xl font-black">{classes.length}</p>
-                </div>
-                <Link to="/classes" className="w-full py-3 bg-white text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-amber-50 transition-colors shadow-lg">
-                  Manage Classes <ArrowRight size={14} />
-                </Link>
-              </div>
-            </section>
-          )}
-        </div>
-
-        {/* Content Area */}
-        <div className="lg:col-span-2 space-y-6">
-          {profile?.role === 'teacher' && (
-            <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm">
-                <div className="flex items-center gap-3 mb-6">
-                    <Megaphone className="text-indigo-600" size={24} />
-                    <h3 className="text-xl font-bold text-slate-900">Post Status or Reminder</h3>
-                </div>
-                
-                <form onSubmit={handlePostReminder} className="space-y-4">
-                    <div className="flex gap-4 p-1 bg-slate-50 rounded-2xl">
-                        <button 
-                            type="button"
-                            onClick={() => setReminderType('status')}
-                            className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${reminderType === 'status' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            Status Update
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={() => setReminderType('reminder')}
-                            className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${reminderType === 'reminder' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                        >
-                            Class Reminder
-                        </button>
+        {/* Joined Classes */}
+        <section className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest mb-4">Classes</h3>
+          <div className="space-y-3">
+             {profile?.role === 'student' ? (
+                studentClasses.map(c => (
+                  <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                      <BookOpen size={20} />
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Select Target Class</label>
-                            <select 
-                                required
-                                value={selectedClassId}
-                                onChange={e => setSelectedClassId(e.target.value)}
-                                className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none font-bold text-slate-700 appearance-none"
-                            >
-                                <option value="" disabled>Choose a class...</option>
-                                {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
                     <div>
-                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">Message Content</label>
-                        <textarea 
-                            required
-                            rows={3}
-                            value={newReminderText}
-                            onChange={e => setNewReminderText(e.target.value)}
-                            placeholder={reminderType === 'status' ? "What's happening in your classes?" : "Don't forget to submit the lab reports!"}
-                            className="w-full px-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-600 resize-none"
-                        />
+                      <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Section {c.inviteCode}</p>
                     </div>
-
-                    <button 
-                        type="submit"
-                        disabled={!selectedClassId || !newReminderText.trim()}
-                        className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-sm flex items-center justify-center gap-3 hover:bg-indigo-700 disabled:opacity-50 shadow-xl shadow-indigo-100 transition-all"
-                    >
-                        <Send size={18} />
-                        Publish & Notify Students
-                    </button>
-                </form>
-
-                <div className="mt-8 pt-8 border-t border-slate-50">
-                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Recent Updates</h4>
-                    <div className="space-y-3">
-                        {reminders.map(rem => (
-                            <div key={rem.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-4">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${rem.type === 'reminder' ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                                    {rem.type === 'reminder' ? <Bell size={18} /> : <MessageSquare size={18} />}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex justify-between items-start">
-                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                                            {classes.find(c => c.id === rem.classId)?.name || 'Deleted Class'} • {rem.createdAt ? format(rem.createdAt.toDate(), 'PP p') : 'Just now'}
-                                        </p>
-                                    </div>
-                                    <p className="text-sm text-slate-700 leading-relaxed">{rem.text}</p>
-                                </div>
-                            </div>
-                        ))}
-                        {reminders.length === 0 && <p className="text-center py-4 text-slate-400 text-sm font-medium">No updates posted yet.</p>}
+                  </div>
+                ))
+             ) : (
+                classes.map(c => (
+                  <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
+                      <Users size={20} />
                     </div>
-                </div>
-            </section>
-          )}
-
-          {profile?.role === 'student' && (
-            <section className="bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm min-h-[400px]">
-                <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-3">
-                    <ClipboardList className="text-indigo-600" size={24} />
-                    Current Assignments
-                </h3>
-                <Link to="/assignments" className="text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline">
-                    View All
-                </Link>
-                </div>
-
-                <div className="space-y-4">
-                {assignments.length > 0 ? (
-                    assignments.slice(0, 5).map(assignment => {
-                    const submission = submissions.find(s => s.assignmentId === assignment.id);
-                    const isSubmitted = !!submission;
-                    const isGraded = submission?.status === 'graded';
-
-                    return (
-                        <motion.div 
-                        key={assignment.id}
-                        whileHover={{ x: 5 }}
-                        className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:border-indigo-100 transition-all group"
-                        >
-                        <div className="flex items-center gap-4">
-                            <div className={`p-3 rounded-xl ${isSubmitted ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                            {isSubmitted ? <CheckCircle2 size={20} /> : <Clock size={20} />}
-                            </div>
-                            <div>
-                            <h4 className="font-bold text-slate-900">{assignment.title}</h4>
-                            <p className="text-xs text-slate-400 italic">Deadline: {assignment.deadline?.toDate ? format(assignment.deadline.toDate(), 'MMM d, p') : 'TBA'}</p>
-                            </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4">
-                            {isGraded ? (
-                            <div className="text-right">
-                                <p className="text-xs font-black text-emerald-600 uppercase tracking-widest">Graded</p>
-                                <p className="text-lg font-black text-slate-900">{submission.grade}/100</p>
-                            </div>
-                            ) : isSubmitted ? (
-                            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest">
-                                Processing
-                            </span>
-                            ) : (
-                            <Link 
-                                to="/assignments" 
-                                className="p-2 text-slate-300 group-hover:text-amber-500 transition-colors"
-                            >
-                                <ArrowRight size={20} />
-                            </Link>
-                            )}
-                        </div>
-                        </motion.div>
-                    );
-                    })
-                ) : (
-                    <div className="py-12 text-center">
-                    <div className="w-16 h-16 bg-slate-50 flex items-center justify-center rounded-full mx-auto mb-4 text-slate-300">
-                        <ClipboardList size={32} />
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.inviteCode} • Master</p>
                     </div>
-                    <p className="text-slate-400 font-medium">No tasks assigned yet.</p>
-                    </div>
-                )}
-                </div>
-                
-                {assignments.length > 5 && (
-                <div className="mt-8 pt-8 border-t border-slate-50 text-center">
-                    <Link to="/assignments" className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-200">
-                    Explore Tasks
-                    </Link>
-                </div>
-                )}
-            </section>
-          )}
+                  </div>
+                ))
+             )}
+             {(profile?.role === 'student' ? studentClasses.length : classes.length) === 0 && (
+                <p className="text-xs text-slate-400 italic py-2">No active classes joined.</p>
+             )}
+          </div>
+        </section>
 
-          {/* Settings Section (Common) */}
-          <section className="bg-slate-900 p-8 rounded-[32px] text-white overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-8 opacity-10">
-              <Camera size={120} />
-            </div>
-            <div className="relative z-10 max-w-sm">
-                <h3 className="text-xl font-bold mb-2">Display Preferences</h3>
-                <p className="text-slate-400 text-sm mb-6">Choose how others see you across the platform.</p>
-                <div className="space-y-4">
+        {/* Settings Area (Dark Card) - Only for own profile */}
+        {isOwnProfile && (
+          <section className="bg-slate-900 p-6 rounded-xl text-white shadow-xl">
+               <div className="flex items-center gap-3 mb-4">
+                  <Camera size={20} className="text-indigo-400" />
+                  <h3 className="text-sm font-bold">Photo Settings</h3>
+               </div>
+               <div className="space-y-4">
                   <div className="flex gap-2">
                       <input 
                           type="text" 
                           value={newPhotoURL}
                           onChange={e => setNewPhotoURL(e.target.value)}
-                          placeholder="Image URL"
-                          className="bg-white/10 border-white/20 text-white rounded-xl px-4 py-2 text-sm flex-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                          placeholder="Avatar URL"
+                          className="bg-white/10 border-white/20 text-white rounded-lg px-4 py-2 text-xs flex-1 outline-none"
                       />
                       <button 
                           onClick={handleUpdatePhoto}
                           disabled={updating || !isOnline}
-                          className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
-                          title="Save URL"
+                          className="bg-indigo-600 hover:bg-indigo-700 px-3 py-2 rounded-lg transition-all disabled:opacity-50"
                       >
-                          {updating ? <span className="animate-pulse">...</span> : <Save size={18} />}
+                          <Save size={16} />
                       </button>
                   </div>
-                  
-                  <button 
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploading || !isOnline}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-white/10 border border-white/20 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-all disabled:opacity-50"
-                  >
-                      {uploading ? 'Uploading...' : <><Camera size={16} /> Upload from Storage</>}
-                  </button>
-                </div>
-                <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
-                    {['2', '4', '6', '8', '10'].map(id => (
-                        <img 
-                            key={id}
-                            src={`https://i.pravatar.cc/150?u=${id}`} 
-                            draggable={false}
-                            className={`w-10 h-10 rounded-lg cursor-pointer border-2 transition-all ${newPhotoURL.includes(`u=${id}`) ? 'border-indigo-500' : 'border-transparent hover:border-white/50'}`}
-                            onClick={() => setNewPhotoURL(`https://i.pravatar.cc/150?u=${id}`)}
-                        />
-                    ))}
-                </div>
-                {!isOnline && <p className="text-[10px] text-amber-500 font-bold mt-2 uppercase tracking-widest">Connect to change photo</p>}
-            </div>
+                  {!isOnline && <p className="text-[9px] text-amber-500 font-black uppercase tracking-widest">Online Connection Required</p>}
+               </div>
           </section>
-        </div>
+        )}
       </div>
     </div>
   );

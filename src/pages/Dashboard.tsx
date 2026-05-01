@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, limit, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Lesson, Assignment, Submission, Reminder } from '../types';
-import { motion } from 'motion/react';
+import { Lesson, Assignment, Submission, Reminder, UserProfile } from '../types';
+import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
 
 export default function Dashboard() {
   const { profile, isOnline } = useAuth();
+  const navigate = useNavigate();
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([]);
@@ -19,6 +20,8 @@ export default function Dashboard() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [offlineCount, setOfflineCount] = useState(0);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -81,6 +84,19 @@ export default function Dashboard() {
     if (profile) fetchData();
   }, [profile, isOnline]);
 
+  // Real-time online users listener
+  useEffect(() => {
+    if (!isOnline) return;
+    const q = query(collection(db, 'users'), where('isOnline', '==', true), limit(10));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const users = snap.docs
+        .map(d => d.data() as UserProfile)
+        .filter(u => u.uid !== profile?.uid); // Exclude self
+      setOnlineUsers(users);
+    });
+    return () => unsubscribe();
+  }, [isOnline, profile?.uid]);
+
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -89,250 +105,210 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900 tracking-tight">
-            Hello, {profile?.displayName?.split(' ')[0]}! 👋
-          </h2>
-          <p className="text-slate-500 mt-1">
-            {isOnline 
-              ? "Here's what's happening in your classes today." 
-              : "You're in offline mode. Accessing downloaded modules."}
-          </p>
+    <div className="flex gap-6 relative">
+      {/* Feed Column */}
+      <div className="flex-1 max-w-[600px] space-y-4">
+        {/* Pull-to-Refresh Visual Cue */}
+        <div className="flex justify-center py-2">
+          <motion.div 
+            animate={{ rotate: 360 }}
+            transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+            className="w-5 h-5 border-2 border-indigo-200 border-t-indigo-600 rounded-full"
+          />
         </div>
-        <div className="flex gap-2">
-          {isOnline && profile?.role === 'teacher' && (
-            <>
+
+        {/* Stories Row */}
+        <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
+          <div className="flex flex-col items-center gap-1 shrink-0">
+            <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5">
+              <img src={profile?.photoURL || 'https://via.placeholder.com/64'} className="w-full h-full rounded-full object-cover" alt="Me" />
+            </div>
+            <span className="text-[10px] font-bold text-slate-900 truncate w-16 text-center">My Story</span>
+          </div>
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-1 shrink-0">
+              <div className="w-16 h-16 rounded-full border-2 border-slate-200 p-0.5">
+                <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xs">
+                  Class
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400 truncate w-16 text-center">Update {i}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Composer Placeholder */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
+          <img src={profile?.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt="Me" />
+          <div className="flex-1 bg-slate-100 h-10 rounded-full flex items-center px-4 text-slate-500 text-sm cursor-pointer hover:bg-slate-200 transition-colors">
+            What's on your mind, {profile?.displayName?.split(' ')[0]}?
+          </div>
+        </div>
+
+        {/* Feed Posts */}
+        <div className="space-y-4">
+          {lessons.map((lesson) => (
+            <div key={lesson.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+              <div className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">B</div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">BISonline Academic</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Post • {lesson.createdAt ? format(lesson.createdAt.toDate(), 'MMM d') : 'Recently'}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="px-4 pb-3">
+                <h5 className="font-bold text-slate-900 mb-1">{lesson.title}</h5>
+                <p className="text-sm text-slate-600 line-clamp-3">{lesson.content}</p>
+              </div>
+              <div className="aspect-video bg-slate-100 flex items-center justify-center">
+                <BookOpen size={48} className="text-slate-300" />
+              </div>
+              <div className="p-2 flex items-center gap-4 border-t border-slate-50">
+                <button className="flex-1 py-1.5 hover:bg-slate-50 rounded-lg text-slate-500 font-bold text-xs">Learn</button>
+                <button className="flex-1 py-1.5 hover:bg-slate-50 rounded-lg text-slate-500 font-bold text-xs">Share</button>
+              </div>
+            </div>
+          ))}
+
+          {reminders.map((rem) => (
+            <div key={rem.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden p-4">
+               <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400">
+                    <Megaphone size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Education Update</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{rem.type} • Now</p>
+                  </div>
+               </div>
+               <p className="text-sm text-slate-700 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 italic">"{rem.text}"</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Online Users Sidebar (Right) */}
+      <div className="hidden xl:block w-72 h-fit space-y-4 sticky top-4">
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Who's Online</h3>
+            <span className="text-[10px] font-black text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">{onlineUsers.length} active</span>
+          </div>
+          
+          <div className="space-y-4">
+            {onlineUsers.map((u) => (
+              <div 
+                key={u.uid} 
+                onClick={() => setSelectedUser(u)}
+                className="flex items-center gap-3 cursor-pointer group hover:bg-slate-50 p-2 rounded-xl transition-all"
+              >
+                <div className="relative">
+                  <img 
+                    src={u.photoURL || 'https://via.placeholder.com/40'} 
+                    className="w-10 h-10 rounded-full border-2 border-white shadow-sm object-cover"
+                    alt={u.displayName || ''}
+                  />
+                  <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
+                    {u.displayName}
+                  </p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter capitalize">
+                    {u.role}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {onlineUsers.length === 0 && (
+              <div className="py-8 text-center">
+                <p className="text-xs text-slate-400 italic">No one else is online right now.</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Suggestion / Class Box */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4">
+           <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Upcoming Events</h3>
+           <div className="space-y-3">
+             <div className="p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                <p className="text-[9px] font-black text-indigo-600 uppercase mb-1">Tomorrow, 10:00 AM</p>
+                <p className="text-xs font-bold text-slate-900">Physics Lab Session</p>
+             </div>
+           </div>
+        </div>
+      </div>
+
+      {/* User Interaction Dialog */}
+      <AnimatePresence>
+        {selectedUser && (
+          <div className="fixed inset-0 flex items-center justify-center z-[100] p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedUser(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-xs bg-white rounded-3xl shadow-2xl p-6 border border-slate-100 overflow-hidden"
+            >
               <button 
-                onClick={() => setIsShareModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs ring-1 ring-indigo-200 hover:bg-indigo-100 transition-all"
+                onClick={() => setSelectedUser(null)}
+                className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-600 transition-colors"
               >
-                <Share2 size={16} /> Share App
+                <X size={20} />
               </button>
-              <Link
-                to="/insights"
-                className="flex items-center gap-2 px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl font-bold text-xs hover:bg-slate-50 transition-all shadow-sm"
-              >
-                <TrendingUp size={16} /> View Insights
-              </Link>
-            </>
-          )}
-          {isOnline ? (
-            <Link 
-              to="/calendar" 
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-            >
-              View Calendar
-            </Link>
-          ) : (
-            <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-xl font-bold text-xs ring-1 ring-amber-200">
-              <CloudOff size={14} /> Offline Access Active
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard 
-          icon={<BookOpen className="text-blue-600" />} 
-          label={isOnline ? "Total Lessons" : "Offline Lessons"} 
-          value={isOnline ? lessons.length.toString() : offlineCount.toString()} 
-          color="bg-blue-50"
-        />
-        <StatCard 
-          icon={<ClipboardList className="text-purple-600" />} 
-          label="Pending Assignments" 
-          value={isOnline ? assignments.filter(a => new Date(a.deadline.toDate()) > new Date()).length.toString() : "Online Only"} 
-          color="bg-purple-50"
-        />
-        <StatCard 
-          icon={<CheckCircle2 className="text-emerald-600" />} 
-          label="Assignments Done" 
-          value={isOnline ? recentSubmissions.filter(s => s.status === 'graded' || s.status === 'submitted').length.toString() : "Online Only"} 
-          color="bg-emerald-50"
-        />
-        <StatCard 
-          icon={<TrendingUp className="text-amber-600" />} 
-          label="Growth Score" 
-          value={isOnline && recentSubmissions.length > 0 ? "3.8/4.0" : "---"} 
-          color="bg-amber-50"
-        />
-      </div>
-
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Student Progress Chart Placeholder */}
-        {profile?.role === 'student' && (
-          <section className="lg:col-span-3">
-            <h3 className="text-xl font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <TrendingUp className="text-indigo-600" size={20} />
-              Growth Tracking
-            </h3>
-            <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col md:flex-row gap-8 items-center">
-              <div className="relative w-48 h-48">
-                <svg className="w-full h-full" viewBox="0 0 36 36">
-                  <path className="text-slate-100" strokeDasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" />
-                  <path className="text-indigo-600" strokeDasharray="85, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-4xl font-black text-slate-900">85%</span>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progress</span>
+              <div className="flex flex-col items-center text-center mt-4">
+                <div className="relative mb-4">
+                  <img 
+                    src={selectedUser.photoURL || 'https://via.placeholder.com/128'} 
+                    className="w-24 h-24 rounded-full border-4 border-indigo-50 shadow-xl object-cover"
+                    alt={selectedUser.displayName || ''}
+                  />
+                  <div className="absolute bottom-1 right-1 w-6 h-6 bg-emerald-500 border-4 border-white rounded-full"></div>
                 </div>
-              </div>
-              <div className="flex-1 space-y-4">
-                <h4 className="text-xl font-bold text-slate-900">Keep it up, {profile.displayName}!</h4>
-                <p className="text-slate-500 text-sm max-w-md">You've completed 85% of your course objectives this semester. Your scores in Quizzes and Assignments are consistently above average. Finish the remaining 3 modules to earn your certificate.</p>
-                <div className="flex gap-3">
-                  <div className="px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl text-indigo-700 text-xs font-bold ring-2 ring-indigo-5/10">8/10 Quizzes</div>
-                  <div className="px-4 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-emerald-700 text-xs font-bold ring-2 ring-emerald-5/10">12/15 Tasks</div>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-        {/* Recent Lessons */}
-        <div className="lg:col-span-2 space-y-6">
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-slate-900">Recent Lessons</h3>
-              <Link to="/lessons" className="text-sm font-medium text-indigo-600 hover:underline flex items-center gap-1">
-                View all <ArrowRight size={14} />
-              </Link>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {lessons.map((lesson) => (
-                <Link key={lesson.id} to={`/lessons`} className="block">
-                  <motion.div 
-                    whileHover={{ y: -4 }}
-                    className="p-5 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all"
+                
+                <h3 className="text-xl font-black text-slate-900 mb-1">{selectedUser.displayName}</h3>
+                <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">{selectedUser.role} • Online</p>
+
+                <div className="w-full space-y-3">
+                  <button 
+                    onClick={() => {
+                      // Navigate to profile
+                      navigate(`/profile?userId=${selectedUser.uid}`);
+                      setSelectedUser(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-3 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg shadow-slate-200"
                   >
-                    <div className="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center mb-4">
-                      <BookOpen className="text-indigo-600" size={20} />
-                    </div>
-                    <h4 className="font-bold text-slate-900 mb-2">{lesson.title}</h4>
-                    <p className="text-xs text-slate-500 line-clamp-2">{lesson.content}</p>
-                  </motion.div>
-                </Link>
-              ))}
-              {lessons.length === 0 && (
-                <div className="col-span-full py-12 text-center bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400">
-                  No lessons found.
+                    <User size={16} />
+                    View Profile
+                  </button>
+                  <button 
+                     onClick={() => {
+                      // Navigate to chat with user
+                      navigate(`/chat?userId=${selectedUser.uid}`);
+                      setSelectedUser(null);
+                    }}
+                    className="w-full flex items-center justify-center gap-3 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                  >
+                    <MessageCircle size={16} />
+                    Direct Message
+                  </button>
                 </div>
-              )}
-            </div>
-          </section>
-
-          {/* Activity Feed */}
-          <section>
-            <h3 className="text-xl font-semibold text-slate-900 mb-4">Activity Feed</h3>
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden text-sm">
-              <div className="divide-y divide-slate-100">
-                {recentSubmissions.map((sub) => (
-                  <div key={sub.id} className="p-4 flex items-start gap-4">
-                    <div className={`p-2 rounded-full ${sub.status === 'graded' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {sub.status === 'graded' ? <CheckCircle2 size={18} /> : <Clock size={18} />}
-                    </div>
-                    <div>
-                      <p className="text-slate-900 font-medium">
-                        {profile?.role === 'teacher' ? `New submission received` : `Submission ${sub.status}`}
-                      </p>
-                      <p className="text-slate-500 text-xs mt-0.5">
-                        {format(sub.submittedAt.toDate(), 'EEE, MMM d, h:mm a')}
-                      </p>
-                    </div>
-                    {sub.grade !== undefined && (
-                      <div className="ml-auto font-bold text-indigo-600">
-                        {sub.grade}/100
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {recentSubmissions.length === 0 && (
-                  <div className="p-8 text-center text-slate-400 italic">
-                    No recent activity yet.
-                  </div>
-                )}
               </div>
-            </div>
-          </section>
-        </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-        {/* Sidebar Widgets */}
-        <div className="space-y-8">
-          {/* Upcoming Assignments */}
-          <section>
-            <h3 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <Clock size={20} className="text-red-500" />
-              Deadlines
-            </h3>
-            <div className="space-y-3">
-              {assignments.map((assignment) => (
-                <div key={assignment.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                  <h4 className="font-bold text-slate-900 text-sm mb-1">{assignment.title}</h4>
-                  <div className="flex items-center gap-2 text-xs">
-                    <span className="text-red-500 font-medium">
-                      Due {format(assignment.deadline.toDate(), 'MMM d')}
-                    </span>
-                    <span className="text-slate-300">•</span>
-                    <span className="text-slate-500">
-                      {format(assignment.deadline.toDate(), 'h:mm a')}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {assignments.length === 0 && (
-                <div className="py-8 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
-                  All caught up!
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* Quick Chat */}
-          <section className="bg-indigo-600 rounded-3xl p-6 text-white shadow-xl shadow-indigo-200">
-            <h3 className="text-lg font-bold mb-2">Need help?</h3>
-            <p className="text-indigo-100 text-sm mb-4">Start a conversation with your teacher or students instantly.</p>
-            <Link 
-              to="/chat" 
-              className="inline-flex items-center gap-2 bg-white text-indigo-600 px-4 py-2 rounded-xl font-bold text-sm hover:bg-slate-50 transition-colors"
-            >
-              Open Messenger
-              <MessageSquare size={16} />
-            </Link>
-          </section>
-
-          {/* Teacher Updates */}
-          <section>
-            <h3 className="text-xl font-semibold text-slate-900 mb-4 flex items-center gap-2">
-              <Megaphone size={20} className="text-indigo-600" />
-              Teacher Updates
-            </h3>
-            <div className="space-y-3">
-              {reminders.map((rem) => (
-                <div key={rem.id} className="p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${rem.type === 'reminder' ? 'bg-amber-50 text-amber-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                      {rem.type}
-                    </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      {rem.createdAt ? format(rem.createdAt.toDate(), 'MMM d, p') : 'Just now'}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-700 leading-relaxed">{rem.text}</p>
-                </div>
-              ))}
-              {reminders.length === 0 && (
-                <div className="py-8 text-center text-slate-400 bg-white rounded-2xl border border-dashed border-slate-200">
-                  No recent updates.
-                </div>
-              )}
-            </div>
-          </section>
-        </div>
-      </div>
       <ShareModal 
         isOpen={isShareModalOpen} 
         onClose={() => setIsShareModalOpen(false)} 
@@ -341,6 +317,7 @@ export default function Dashboard() {
     </div>
   );
 }
+
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode, label: string, value: string, color: string }) {
   return (

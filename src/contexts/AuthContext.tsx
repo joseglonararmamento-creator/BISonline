@@ -80,8 +80,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (firebaseUser) {
-        // Use onSnapshot for real-time profile updates
+        // Update presence
         const userDocRef = doc(db, 'users', firebaseUser.uid);
+        setDoc(userDocRef, { 
+          isOnline: true, 
+          lastActive: serverTimestamp() 
+        }, { merge: true });
+
+        // Use onSnapshot for real-time profile updates
         unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
             setProfile(docSnap.data() as UserProfile);
@@ -190,6 +196,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     try {
+      if (user) {
+        await setDoc(doc(db, 'users', user.uid), { isOnline: false }, { merge: true });
+      }
       await signOut(auth);
     } catch (err) {
       console.error("Logout error:", err);

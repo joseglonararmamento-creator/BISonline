@@ -4,6 +4,8 @@
 @layer base {
   html, body {
     @apply antialiased overflow-x-hidden;
+    background-color: #F0F2F5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
     -webkit-touch-callout: none;
@@ -13,6 +15,10 @@
   /* Allow text selection in specific areas like lessons/inputs */
   input, textarea, [contenteditable="true"], .markdown-body {
     user-select: text;
+  }
+
+  button, a {
+    @apply transition-all active:scale-95;
   }
 }
 

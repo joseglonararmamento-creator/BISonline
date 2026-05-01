@@ -9,6 +9,8 @@ export interface UserProfile {
   classNumber?: string; // Legacy
   classId?: string; // Legacy (single class)
   classIds?: string[]; // New: Multiple classes
+  isOnline?: boolean;
+  lastActive?: any;
   createdAt: any;
 }
 

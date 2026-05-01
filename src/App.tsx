@@ -19,7 +19,10 @@ import {
   Trophy,
   Menu,
   X,
-  LayoutGrid
+  LayoutGrid,
+  Search,
+  Bell,
+  Home
 } from 'lucide-react';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -95,28 +98,25 @@ const MobileNav = () => {
   const location = useLocation();
 
   const links = [
-    { to: '/', icon: <LayoutDashboard size={20} />, label: 'Home' },
-    { to: '/lessons', icon: <BookOpen size={20} />, label: 'Lessons' },
-    { to: '/chat', icon: <MessageSquare size={20} />, label: 'Chat' },
-    { to: '/profile', icon: <User size={20} />, label: 'Profile' },
+    { to: '/', icon: <Home size={24} />, label: 'Home' },
+    { to: '/lessons', icon: <BookOpen size={24} />, label: 'Lessons' },
+    { to: '/chat', icon: <MessageSquare size={24} />, label: 'Chat' },
+    { to: '/profile', icon: <User size={24} />, label: 'Profile' },
   ];
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 px-6 py-2 flex justify-between items-center z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-center h-14 z-50 md:hidden pb-safe">
       {links.map((link) => {
         const isActive = location.pathname === link.to;
         return (
           <Link
             key={link.to}
             to={link.to}
-            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+            className={`p-2 transition-all ${
               isActive ? 'text-indigo-600' : 'text-slate-400'
             }`}
           >
-            <div className={`transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}>
-              {link.icon}
-            </div>
-            <span className="text-[10px] font-bold uppercase tracking-tighter">{link.label}</span>
+            {link.icon}
           </Link>
         );
       })}
@@ -129,152 +129,57 @@ const Navbar = () => {
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const location = useLocation();
 
-  const links = [
-    { to: '/', icon: <LayoutDashboard size={20} />, label: 'Dashboard' },
-    { to: '/lessons', icon: <BookOpen size={20} />, label: 'Lessons' },
-    { to: '/assignments', icon: <ClipboardList size={20} />, label: 'Assignments' },
-    { to: '/calendar', icon: <Calendar size={20} />, label: 'Calendar' },
-    { to: '/chat', icon: <MessageSquare size={20} />, label: 'Messages' },
-    { to: '/quiz-history', icon: <Trophy size={20} />, label: 'Quiz History' },
-    { to: '/profile', icon: <User size={20} />, label: 'My Profile' },
-  ];
-
-  if (profile?.role === 'teacher') {
-    links.splice(1, 0, { to: '/classes', icon: <LayoutGrid size={20} />, label: 'My Classes' });
-    links.splice(2, 0, { to: '/insights', icon: <TrendingUp size={20} />, label: 'Teacher Insights' });
-  }
-
   const switchRole = async () => {
     if (!profile) return;
     const newRole = profile.role === 'teacher' ? 'student' : 'teacher';
     await setDoc(doc(db, 'users', profile.uid), { role: newRole }, { merge: true });
-    window.location.reload(); // Refresh to update session/rules context
+    window.location.reload(); 
   };
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 sticky top-0 z-40">
-      <div className="flex items-center gap-3">
-        <button 
-          onClick={() => setShowMobileMenu(true)}
-          className="lg:hidden p-2 text-slate-500 hover:bg-slate-50 rounded-xl"
-        >
-          <Menu size={24} />
-        </button>
+    <header className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-50">
+      <div className="flex items-center gap-4">
+        <Link to="/" className="flex items-center gap-2 text-indigo-600">
+          <GraduationCap size={28} strokeWidth={2.5} />
+          <span className="hidden sm:inline text-xl font-black tracking-tighter">BISonline</span>
+        </Link>
+      </div>
 
-        <h1 className="text-slate-400 font-bold lg:hidden flex items-center gap-2 text-sm sm:text-base">
-          <GraduationCap size={20} className="text-indigo-600" />
-          <span className="truncate max-w-[100px] sm:max-w-none">BISonline</span>
-        </h1>
-        
-        {/* Connection Status indicator */}
-        <div className="flex items-center">
-          {isOnline ? (
-            <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100">
-              <Wifi size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Online</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-amber-50 text-amber-600 rounded-full border border-amber-100 animate-pulse">
-              <WifiOff size={12} />
-              <span className="text-[9px] font-black uppercase tracking-widest">Offline</span>
-            </div>
-          )}
+      <div className="flex-1 max-w-md px-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input 
+            type="text" 
+            placeholder="Search BISonline..."
+            className="w-full bg-slate-100 border-none rounded-full py-1.5 pl-9 pr-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-500"
+          />
         </div>
       </div>
 
-      {/* Mobile Menu Overlay */}
-      <AnimatePresence>
-        {showMobileMenu && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowMobileMenu(false)}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] lg:hidden"
-            />
-            <motion.div 
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 left-0 w-72 bg-white z-[70] lg:hidden shadow-2xl flex flex-col"
-            >
-              <div className="p-6">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-2 text-indigo-600">
-                    <GraduationCap size={32} strokeWidth={2.5} />
-                    <span className="text-2xl font-bold tracking-tight">BISonline</span>
-                  </div>
-                  <button 
-                    onClick={() => setShowMobileMenu(false)}
-                    className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-50 rounded-xl"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
-
-                <nav className="space-y-1">
-                  {links.map((link) => (
-                    <Link
-                      key={link.to}
-                      to={link.to}
-                      onClick={() => setShowMobileMenu(false)}
-                      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
-                        location.pathname === link.to
-                          ? 'bg-indigo-50 text-indigo-600 font-bold shadow-sm'
-                          : 'text-slate-600 hover:bg-slate-50'
-                      }`}
-                    >
-                      {link.icon}
-                      <span className="text-sm">{link.label}</span>
-                    </Link>
-                  ))}
-                </nav>
-              </div>
-
-              <div className="mt-auto p-6 border-t border-slate-100">
-                <button 
-                  onClick={logout}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all font-bold text-sm"
-                >
-                  <LogOut size={20} />
-                  Logout Account
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      <div className="flex items-center gap-2 sm:gap-4">
-        <button 
-          onClick={switchRole}
-          className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 sm:px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors whitespace-nowrap"
-        >
-          {profile?.role === 'teacher' ? 'Student View' : 'Teacher View'}
+      <div className="flex items-center gap-2">
+        <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative">
+          <Bell size={20} />
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
         </button>
         
-        <div className="flex items-center gap-1 sm:gap-3 pl-2 sm:pl-4 border-l border-slate-200">
-          <Link to="/profile" className="flex items-center gap-2 hover:bg-slate-50 transition-colors p-1 rounded-xl group">
-            <div className="text-right hidden sm:block">
-              <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors truncate max-w-[80px]">{profile?.displayName}</p>
-              <p className="text-[10px] text-slate-400 capitalize">{profile?.role}</p>
-            </div>
-            <img 
-              src={profile?.photoURL || 'https://via.placeholder.com/40'} 
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 border-indigo-100 shadow-sm group-hover:border-indigo-400 transition-all"
-              alt="Profile"
-            />
-          </Link>
-          <button 
-            onClick={logout}
-            className="hidden sm:block p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
-            title="Logout"
-          >
-            <LogOut size={20} />
-          </button>
+        <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-100 italic text-[10px] text-slate-400 uppercase tracking-widest font-black pr-2">
+           {profile?.role} 
         </div>
+
+        <Link to="/profile" className="flex items-center">
+          <img 
+            src={profile?.photoURL || 'https://via.placeholder.com/40'} 
+            className="w-8 h-8 rounded-full border border-slate-200"
+            alt="Profile"
+          />
+        </Link>
+
+        <button 
+          onClick={logout}
+          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
+        >
+          <LogOut size={20} />
+        </button>
       </div>
     </header>
   );
@@ -356,11 +261,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   );
   
   return (
-    <div className="flex bg-slate-50 min-h-screen">
+    <div className="flex bg-[#F0F2F5] min-h-screen">
       <Sidebar />
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col pt-14">
         <Navbar />
-        <main className="p-4 md:p-8 max-w-7xl w-full mx-auto pb-24 md:pb-8">
+        <main className="w-full max-w-[1200px] mx-auto px-4 pt-4 pb-20 md:pb-8">
           {children}
         </main>
         <MobileNav />

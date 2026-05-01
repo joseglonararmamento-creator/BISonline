@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, limit, getDocs, updateDoc, doc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, limit, getDocs, updateDoc, doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Message, UserProfile, Class } from '../types';
@@ -24,6 +24,7 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { useSearchParams } from 'react-router-dom';
 
 function AudioPlayer({ src, isMine }: { src: string, isMine: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -127,13 +128,38 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [searchParams] = useSearchParams();
+  const deepLinkUserId = searchParams.get('userId');
+
   const emojiList = ['😀', '😂', '😍', '👍', '🔥', '📚', '✏️', '🎓'];
 
   useEffect(() => {
     const fetchUsers = async () => {
       const q = query(collection(db, 'users'), limit(100));
       const snap = await getDocs(q);
-      setUsers(snap.docs.map(d => d.data() as UserProfile).filter(u => u.uid !== profile?.uid));
+      const allUsers = snap.docs.map(d => d.data() as UserProfile).filter(u => u.uid !== profile?.uid);
+      setUsers(allUsers);
+
+      if (deepLinkUserId) {
+        const targetUser = allUsers.find(u => u.uid === deepLinkUserId);
+        if (targetUser) {
+          setSelectedUser(targetUser);
+          setChatType('direct');
+          setShowSidebar(false);
+        } else {
+            // Might not be in the initial limit(100), fetch specifically
+            try {
+                const userDoc = await getDoc(doc(db, 'users', deepLinkUserId));
+                if (userDoc.exists()) {
+                    setSelectedUser(userDoc.data() as UserProfile);
+                    setChatType('direct');
+                    setShowSidebar(false);
+                }
+            } catch (err) {
+                console.error("Deep link user fetch failed:", err);
+            }
+        }
+      }
     };
     const fetchClasses = async () => {
       const q = query(collection(db, 'classes'));
