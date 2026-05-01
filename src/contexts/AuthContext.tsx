@@ -82,16 +82,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (firebaseUser) {
         // Update presence
         const userDocRef = doc(db, 'users', firebaseUser.uid);
-        setDoc(userDocRef, { 
-          isOnline: true, 
-          lastActive: serverTimestamp() 
-        }, { merge: true });
-
+        
         // Use onSnapshot for real-time profile updates
         unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
-            setProfile(docSnap.data() as UserProfile);
+            const data = docSnap.data() as UserProfile;
+            setProfile(data);
+            
+            // If profile exists but role is missing, we need onboarding
+            if (!data.role) {
+              setLoading(false);
+            }
           } else {
+            // Profile doesn't exist at all
             setProfile(null);
           }
           setLoading(false);
@@ -99,6 +102,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.error("Profile listener error:", err);
           setLoading(false);
         });
+
+        // Set online status
+        setDoc(userDocRef, { 
+          isOnline: true, 
+          lastActive: serverTimestamp() 
+        }, { merge: true });
 
         // Background Sync for Quiz Attempts
         if (isOnline) {

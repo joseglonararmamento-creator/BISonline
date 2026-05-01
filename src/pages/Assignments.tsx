@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, setDoc, doc, Timestamp, where, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Assignment, Submission } from '../types';
@@ -89,17 +89,49 @@ export default function Assignments() {
           throw new Error('Firebase Storage is not enabled or provisioned. Please contact your administrator.');
         }
         const fileRef = ref(storage, `submissions/${selectedAssignment.id}/${profile.uid}/${selectedFile.name}`);
-        const uploadResult = await uploadBytes(fileRef, selectedFile);
-        fileUrl = await getDownloadURL(uploadResult.ref);
-        fileName = selectedFile.name;
+        const uploadTask = uploadBytesResumable(fileRef, selectedFile);
+        
+        return new Promise((resolve, reject) => {
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              setUploadProgress(progress);
+            },
+            (error) => {
+              console.error("Upload error:", error);
+              setIsSubmitting(false);
+              reject(error);
+            },
+            async () => {
+              const fileUrl = await getDownloadURL(uploadTask.snapshot.ref);
+              const fileName = selectedFile.name;
+              
+              await addDoc(collection(db, 'submissions'), {
+                assignmentId: selectedAssignment.id,
+                studentId: profile.uid,
+                content: submissionText,
+                fileUrl,
+                fileName,
+                status: 'submitted',
+                submittedAt: serverTimestamp(),
+              });
+              setSubmissionText('');
+              setSelectedFile(null);
+              setUploadProgress(0);
+              setIsSubmitting(false);
+              alert("Submission successful!");
+              resolve(true);
+            }
+          );
+        });
       }
 
       await addDoc(collection(db, 'submissions'), {
         assignmentId: selectedAssignment.id,
         studentId: profile.uid,
         content: submissionText,
-        fileUrl,
-        fileName,
+        fileUrl: '',
+        fileName: '',
         status: 'submitted',
         submittedAt: serverTimestamp(),
       });

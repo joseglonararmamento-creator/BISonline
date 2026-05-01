@@ -261,11 +261,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   );
   
   return (
-    <div className="flex bg-[#F0F2F5] min-h-screen">
+    <div className="flex bg-[#F0F2F5] h-screen overflow-hidden">
       <Sidebar />
-      <div className="flex-1 flex flex-col pt-14">
+      <div className="flex-1 flex flex-col h-full overflow-hidden pt-14">
         <Navbar />
-        <main className="w-full max-w-[1200px] mx-auto px-4 pt-4 pb-20 md:pb-8">
+        <main className="flex-1 overflow-y-auto w-full max-w-[1200px] mx-auto px-4 pt-4 pb-20 md:pb-8 custom-scrollbar">
           {children}
         </main>
         <MobileNav />

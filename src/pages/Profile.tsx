@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType } from '../types';
@@ -114,22 +114,30 @@ export default function Profile() {
       
       setUploadProgress(50);
       const storageRef = ref(storage, `profiles/${profile.uid}/${Date.now()}_${compressedFile.name}`);
-      const snapshot = await uploadBytes(storageRef, compressedFile);
-      
-      setUploadProgress(80);
-      const downloadURL = await getDownloadURL(snapshot.ref);
+      const uploadTask = uploadBytesResumable(storageRef, compressedFile);
 
-      await updateDoc(doc(db, 'users', profile.uid), {
-        photoURL: downloadURL
-      });
-      
-      setNewPhotoURL(downloadURL);
-      setUploadProgress(100);
-      setTimeout(() => {
-        setUploading(false);
-        setUploadProgress(0);
-        alert('Profile picture uploaded successfully!');
-      }, 500);
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress( progress);
+        }, 
+        (error) => {
+          console.error("Upload task failed:", error);
+          setUploading(false);
+          setUploadProgress(0);
+          alert(`Upload failed: ${error.message}`);
+        }, 
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          await updateDoc(doc(db, 'users', profile.uid), {
+            photoURL: downloadURL
+          });
+          setNewPhotoURL(downloadURL);
+          setUploading(false);
+          setUploadProgress(0);
+          alert('Profile picture uploaded successfully!');
+        }
+      );
     } catch (err: any) {
       console.error('Upload failed:', err);
       setUploading(false);

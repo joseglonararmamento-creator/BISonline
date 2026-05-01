@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, limit, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Assignment, Submission, Reminder, UserProfile } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X } from 'lucide-react';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
@@ -22,14 +22,54 @@ export default function Dashboard() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [dairies, setDairies] = useState<any[]>([]);
+  const [interactions, setInteractions] = useState<{ [key: string]: { hearts: number, comments: any[] } }>({});
+  const [newDairyText, setNewDairyText] = useState('');
+  const [showDiaryComposer, setShowDiaryComposer] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+
+  const handlePostDairy = async () => {
+    if (!profile || !newDairyText.trim()) return;
+    setPublishing(true);
+    try {
+      await addDoc(collection(db, 'dairies'), {
+        authorId: profile.uid,
+        authorName: profile.displayName,
+        photoURL: profile.photoURL,
+        text: newDairyText,
+        createdAt: serverTimestamp()
+      });
+      setNewDairyText('');
+      // Refresh logic would ideally use onSnapshot, but we already have a 24h filter
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const handleStatHeart = async (lessonId: string) => {
+    // Implement heart animation/logic
+    console.log("Hearted lesson", lessonId);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         if (isOnline) {
           // Lessons
-          const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(3), orderBy('createdAt', 'desc')));
+          const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(5), orderBy('createdAt', 'desc')));
           setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Lesson)));
+
+          // Dairies (Expired after 24 hours)
+          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+          const dairiesQuery = query(
+            collection(db, 'dairies'), 
+            where('createdAt', '>', oneDayAgo),
+            orderBy('createdAt', 'desc')
+          );
+          const dairiesSnap = await getDocs(dairiesQuery);
+          setDairies(dairiesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
           // Assignments
           const assignmentsSnap = await getDocs(query(collection(db, 'assignments'), limit(3), orderBy('deadline', 'asc')));
@@ -97,6 +137,22 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [isOnline, profile?.uid]);
 
+  // Real-time dairies listener (24h filter)
+  useEffect(() => {
+    if (!isOnline) return;
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const q = query(
+      collection(db, 'dairies'),
+      where('createdAt', '>', oneDayAgo),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setDairies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubscribe();
+  }, [isOnline]);
+
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -117,59 +173,132 @@ export default function Dashboard() {
           />
         </div>
 
-        {/* Stories Row */}
+        {/* Dairies Row */}
         <div className="flex gap-4 overflow-x-auto pb-4 custom-scrollbar">
           <div className="flex flex-col items-center gap-1 shrink-0">
-            <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5">
+            <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5 relative">
               <img src={profile?.photoURL || 'https://via.placeholder.com/64'} className="w-full h-full rounded-full object-cover" alt="Me" />
+              <div className="absolute bottom-0 right-0 bg-indigo-600 text-white rounded-full p-1 border-2 border-white">
+                <Plus size={10} />
+              </div>
             </div>
-            <span className="text-[10px] font-bold text-slate-900 truncate w-16 text-center">My Story</span>
+            <span className="text-[10px] font-bold text-slate-900 truncate w-16 text-center">Your Dairy</span>
           </div>
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex flex-col items-center gap-1 shrink-0">
+          {dairies.map((dairy) => (
+            <div key={dairy.id} className="flex flex-col items-center gap-1 shrink-0">
+              <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5">
+                 <img src={dairy.photoURL || 'https://via.placeholder.com/64'} className="w-full h-full rounded-full object-cover" alt="" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-500 truncate w-16 text-center">{dairy.authorName}</span>
+            </div>
+          ))}
+          {dairies.length === 0 && [1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col items-center gap-1 shrink-0 opacity-50">
               <div className="w-16 h-16 rounded-full border-2 border-slate-200 p-0.5">
                 <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xs">
-                  Class
+                  ...
                 </div>
               </div>
-              <span className="text-[10px] font-bold text-slate-400 truncate w-16 text-center">Update {i}</span>
+              <span className="text-[10px] font-bold text-slate-400 truncate w-16 text-center">Classmate</span>
             </div>
           ))}
         </div>
 
         {/* Composer Placeholder */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex items-center gap-4">
-          <img src={profile?.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt="Me" />
-          <div className="flex-1 bg-slate-100 h-10 rounded-full flex items-center px-4 text-slate-500 text-sm cursor-pointer hover:bg-slate-200 transition-colors">
-            What's on your mind, {profile?.displayName?.split(' ')[0]}?
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <img src={profile?.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full" alt="Me" />
+            <input 
+              type="text"
+              value={newDairyText}
+              onChange={e => setNewDairyText(e.target.value)}
+              placeholder={`What's Latest, ${profile?.displayName?.split(' ')[0]}?`}
+              onFocus={() => setShowDiaryComposer(true)}
+              className="flex-1 bg-slate-100 h-10 rounded-full flex items-center px-4 text-slate-500 text-sm outline-none focus:ring-2 focus:ring-indigo-500/20"
+            />
           </div>
+          
+          <AnimatePresence>
+            {showDiaryComposer && (
+              <motion.div 
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="flex justify-end gap-2 pt-2 border-t border-slate-50">
+                  <button 
+                    onClick={() => setShowDiaryComposer(false)}
+                    className="px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-50 rounded-lg"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handlePostDairy}
+                    disabled={publishing || !newDairyText.trim()}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 disabled:opacity-50"
+                  >
+                    {publishing ? 'Posting...' : 'Post Dairy'}
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Feed Posts */}
         <div className="space-y-4">
           {lessons.map((lesson) => (
-            <div key={lesson.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              key={lesson.id} 
+              className="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden"
+            >
               <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold">B</div>
+                  <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-inner">B</div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">BISonline Academic</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Post • {lesson.createdAt ? format(lesson.createdAt.toDate(), 'MMM d') : 'Recently'}</p>
+                    <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1">
+                      Post • {lesson.createdAt ? format(lesson.createdAt.toDate(), 'MMM d') : 'Recently'}
+                    </p>
                   </div>
                 </div>
+                <button className="text-slate-400 hover:bg-slate-50 p-2 rounded-full">
+                  <ExternalLink size={16} />
+                </button>
               </div>
               <div className="px-4 pb-3">
-                <h5 className="font-bold text-slate-900 mb-1">{lesson.title}</h5>
-                <p className="text-sm text-slate-600 line-clamp-3">{lesson.content}</p>
+                <h5 className="font-bold text-slate-900 mb-2 text-lg leading-tight">{lesson.title}</h5>
+                <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">{lesson.content}</p>
               </div>
-              <div className="aspect-video bg-slate-100 flex items-center justify-center">
-                <BookOpen size={48} className="text-slate-300" />
+              <div className="aspect-[16/9] bg-slate-50 flex items-center justify-center border-y border-slate-50">
+                <BookOpen size={48} className="text-indigo-100" />
               </div>
-              <div className="p-2 flex items-center gap-4 border-t border-slate-50">
-                <button className="flex-1 py-1.5 hover:bg-slate-50 rounded-lg text-slate-500 font-bold text-xs">Learn</button>
-                <button className="flex-1 py-1.5 hover:bg-slate-50 rounded-lg text-slate-500 font-bold text-xs">Share</button>
+              <div className="px-4 py-2 flex items-center justify-between border-t border-slate-50">
+                <div className="flex items-center -space-x-1">
+                  <div className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white">❤️</div>
+                  <div className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white">👍</div>
+                  <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">12 Reactions</span>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">3 Comments</span>
               </div>
-            </div>
+              <div className="px-2 pb-2 flex items-center gap-2">
+                <motion.button 
+                  whileTap={{ scale: 1.4 }}
+                  onClick={() => handleStatHeart(lesson.id)}
+                  className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all active:text-red-500"
+                >
+                  <TrendingUp size={16} />
+                  Heart
+                </motion.button>
+                <button className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+                  <MessageCircle size={16} />
+                  Comment
+                </button>
+              </div>
+            </motion.div>
           ))}
 
           {reminders.map((rem) => (

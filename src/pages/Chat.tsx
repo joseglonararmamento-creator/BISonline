@@ -381,40 +381,40 @@ export default function Chat() {
   const activeClassName = selectedClassId === TEACHERS_LOUNGE_ID ? 'Teachers Lounge' : (classes.find(c => c.id === selectedClassId)?.name || 'Classroom');
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden flex h-[calc(100vh-12rem)] md:h-[calc(100vh-12rem)] min-h-[500px] md:min-h-[600px] relative">
+    <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden flex h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)] relative flex-col md:flex-row">
       {/* Sidebar */}
-      <div className={`${showSidebar ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-slate-100 flex-col bg-slate-50/50 absolute md:relative inset-0 z-20 md:z-auto`}>
-        <div className="p-6">
+      <div className={`${showSidebar ? 'flex' : 'hidden'} md:flex w-full md:w-80 border-r border-slate-100 flex-col bg-slate-50/50 absolute md:relative inset-0 z-20 md:z-auto h-full flex-col`}>
+        <div className="p-4 md:p-6 shrink-0">
           <h3 className="text-xl font-bold text-slate-900 mb-4">Messaging</h3>
           
-          <div className="flex bg-slate-200/50 p-1 rounded-xl mb-6">
+          <div className="flex bg-slate-200/50 p-1 rounded-xl mb-4">
             <button 
               onClick={() => { setChatType('class'); setSelectedUser(null); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${chatType === 'class' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${chatType === 'class' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Classes
             </button>
             <button 
               onClick={() => { setChatType('direct'); }}
-              className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${chatType === 'direct' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all ${chatType === 'direct' ? 'bg-white shadow-sm text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Direct
             </button>
           </div>
 
-          <div className="relative mb-4">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text" 
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              placeholder="Search chats or classes..." 
-              className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none shadow-sm focus:ring-2 focus:ring-indigo-500/20"
+              placeholder="Search..." 
+              className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm outline-none shadow-sm focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
         </div>
         
-        <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4">
+        <div className="flex-1 overflow-y-auto px-2 space-y-1 pb-4 custom-scrollbar">
           {chatType === 'class' ? (
             <div className="space-y-4">
               {/* Joined Classes */}
