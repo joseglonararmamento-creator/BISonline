@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion } from 'firebase/firestore';
-import { db } from '../firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,6 +46,38 @@ export default function Profile() {
   const [updating, setUpdating] = useState(false);
   const [inviteCode, setInviteCode] = useState('');
   const [newPhotoURL, setNewPhotoURL] = useState(profile?.photoURL || '');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile || !storage) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file.');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `profiles/${profile.uid}/${Date.now()}_${file.name}`);
+      const snapshot = await uploadBytes(storageRef, file);
+      const downloadURL = await getDownloadURL(snapshot.ref);
+
+      await updateDoc(doc(db, 'users', profile.uid), {
+        photoURL: downloadURL
+      });
+      
+      setNewPhotoURL(downloadURL);
+      alert('Profile picture uploaded successfully!');
+      window.location.reload();
+    } catch (err) {
+      console.error('Upload failed:', err);
+      alert('Failed to upload image. Please check your storage permissions.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleJoinClass = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,25 +255,30 @@ export default function Profile() {
         
         <div className="absolute -bottom-20 sm:-bottom-16 left-0 right-0 sm:left-8 flex flex-col sm:flex-row items-center sm:items-end gap-4 sm:gap-6 px-4">
           <div className="relative group shrink-0">
-            <img 
-              src={profile?.photoURL || 'https://via.placeholder.com/128'} 
-              className="w-32 h-32 rounded-[32px] border-8 border-white bg-white shadow-xl object-cover"
-              alt="Profile"
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+              accept="image/*"
             />
-            {isOnline && (
+            <div className="relative">
+              <img 
+                src={profile?.photoURL || 'https://via.placeholder.com/128'} 
+                className={`w-32 h-32 rounded-[32px] border-8 border-white bg-white shadow-xl object-cover transition-opacity ${uploading ? 'opacity-50' : ''}`}
+                alt="Profile"
+              />
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                </div>
+              )}
+            </div>
+            {isOnline && !uploading && (
               <button 
-                onClick={() => {
-                  const url = prompt('Enter new Profile Picture URL:', profile?.photoURL || '');
-                  if (url) {
-                    setNewPhotoURL(url);
-                    const fastUpdate = async () => {
-                        await updateDoc(doc(db, 'users', profile!.uid), { photoURL: url });
-                        window.location.reload();
-                    };
-                    fastUpdate();
-                  }
-                }}
+                onClick={() => fileInputRef.current?.click()}
                 className="absolute inset-0 bg-black/40 rounded-[32px] opacity-0 group-hover:opacity-100 flex items-center justify-center text-white transition-opacity cursor-pointer"
+                title="Upload Photo from Device"
               >
                 <Camera size={32} />
               </button>
@@ -554,21 +592,32 @@ export default function Profile() {
             <div className="relative z-10 max-w-sm">
                 <h3 className="text-xl font-bold mb-2">Display Preferences</h3>
                 <p className="text-slate-400 text-sm mb-6">Choose how others see you across the platform.</p>
-                <div className="flex gap-2">
-                    <input 
-                        type="text" 
-                        value={newPhotoURL}
-                        onChange={e => setNewPhotoURL(e.target.value)}
-                        placeholder="Image URL"
-                        className="bg-white/10 border-white/20 text-white rounded-xl px-4 py-2 text-sm flex-1 focus:ring-2 focus:ring-indigo-500 outline-none"
-                    />
-                    <button 
-                        onClick={handleUpdatePhoto}
-                        disabled={updating || !isOnline}
-                        className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
-                    >
-                        {updating ? <span className="animate-pulse">...</span> : <Save size={18} />}
-                    </button>
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                      <input 
+                          type="text" 
+                          value={newPhotoURL}
+                          onChange={e => setNewPhotoURL(e.target.value)}
+                          placeholder="Image URL"
+                          className="bg-white/10 border-white/20 text-white rounded-xl px-4 py-2 text-sm flex-1 focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                      <button 
+                          onClick={handleUpdatePhoto}
+                          disabled={updating || !isOnline}
+                          className="bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-xl transition-all disabled:opacity-50"
+                          title="Save URL"
+                      >
+                          {updating ? <span className="animate-pulse">...</span> : <Save size={18} />}
+                      </button>
+                  </div>
+                  
+                  <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading || !isOnline}
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-white/10 border border-white/20 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-all disabled:opacity-50"
+                  >
+                      {uploading ? 'Uploading...' : <><Camera size={16} /> Upload from Storage</>}
+                  </button>
                 </div>
                 <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
                     {['2', '4', '6', '8', '10'].map(id => (
