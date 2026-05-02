@@ -21,10 +21,16 @@ import {
   Volume2,
   VolumeX,
   ChevronLeft,
-  ShieldCheck
+  ShieldCheck,
+  Paperclip,
+  FileText,
+  Download,
+  Youtube,
+  ExternalLink
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useSearchParams } from 'react-router-dom';
+import { uploadFile } from '../services/uploadService';
 
 function AudioPlayer({ src, isMine }: { src: string, isMine: boolean }) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -120,6 +126,7 @@ export default function Chat() {
   const [selectedClassId, setSelectedClassId] = useState<string>('');
   const [newMessage, setNewMessage] = useState('');
   const [isRecording, setIsRecording] = useState(false);
+  const [uploadingProgress, setUploadingProgress] = useState<number | null>(null);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [showSidebar, setShowSidebar] = useState(true);
@@ -276,7 +283,7 @@ export default function Chat() {
     }
   };
 
-  const handleSendMessage = async (e?: React.FormEvent, media?: { type: 'image' | 'audio', url: string }) => {
+  const handleSendMessage = async (e?: React.FormEvent, media?: { type: 'image' | 'audio' | 'file', url: string, name?: string, size?: number }) => {
     e?.preventDefault();
     if (!profile) return;
     if (!newMessage.trim() && !media) return;
@@ -299,8 +306,45 @@ export default function Chat() {
       if (media) {
         payload.mediaUrl = media.url;
         payload.mediaType = media.type;
+        if (media.type === 'file') {
+          payload.fileName = media.name;
+          payload.fileSize = media.size;
+        }
       } else {
         payload.text = newMessage;
+        
+        // YouTube Integration: Detect YouTube link
+        const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
+        const match = newMessage.match(youtubeRegex);
+        if (match && match[1]) {
+          const videoId = match[1];
+          try {
+            // Simple metadata fetch via oembed
+            const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+            if (response.ok) {
+              const data = await response.json();
+              payload.youtubeMetadata = {
+                videoId: videoId,
+                title: data.title,
+                thumbnailUrl: data.thumbnail_url
+              };
+            } else {
+              // Fallback if oembed fails
+              payload.youtubeMetadata = {
+                videoId: videoId,
+                title: "YouTube Video",
+                thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+              };
+            }
+          } catch (err) {
+            console.warn("YouTube metadata fetch failed:", err);
+            payload.youtubeMetadata = {
+              videoId: videoId,
+              title: "YouTube Video",
+              thumbnailUrl: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
+            };
+          }
+        }
       }
 
       await addDoc(collection(db, 'messages'), payload);
@@ -363,14 +407,51 @@ export default function Chat() {
     setIsRecording(false);
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        handleSendMessage(undefined, { type: 'image', url: reader.result as string });
-      };
-      reader.readAsDataURL(file);
+    if (!file || !profile) return;
+
+    setUploadingProgress(0);
+    try {
+      const result = await uploadFile(file, `chats/${chatType === 'class' ? selectedClassId : 'direct'}`, (progress) => {
+        setUploadingProgress(progress);
+      });
+      
+      await handleSendMessage(undefined, { 
+        type: 'file', 
+        url: result.url,
+        name: result.name,
+        size: result.size
+      });
+    } catch (err) {
+      console.error("File upload failed:", err);
+      alert("Failed to upload file.");
+    } finally {
+      setUploadingProgress(null);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+
+    setUploadingProgress(0);
+    try {
+      const result = await uploadFile(file, `chats/images`, (progress) => {
+        setUploadingProgress(progress);
+      });
+      
+      await handleSendMessage(undefined, { 
+        type: 'image', 
+        url: result.url
+      });
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      alert("Failed to upload image.");
+    } finally {
+      setUploadingProgress(null);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -588,8 +669,61 @@ export default function Chat() {
                               : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none hover:border-indigo-100'
                           }`}>
                             {m.mediaType === 'image' && (
-                              <div className="mb-2 relative group overflow-hidden rounded-xl">
-                                <img src={m.mediaUrl} className="max-w-full shadow-sm hover:scale-105 transition-transform cursor-pointer" alt="Uploaded" />
+                              <div className="mb-2 relative group overflow-hidden rounded-xl bg-slate-100 min-h-[100px] flex items-center justify-center">
+                                <img src={m.mediaUrl} className="max-w-full shadow-sm hover:scale-105 transition-transform cursor-pointer" alt="Uploaded" loading="lazy" />
+                              </div>
+                            )}
+                            {m.mediaType === 'file' && (
+                              <div className={`mb-3 p-3 rounded-xl border flex items-center gap-3 ${isMine ? 'bg-indigo-700/50 border-white/20' : 'bg-slate-50 border-slate-200'}`}>
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${isMine ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-600'}`}>
+                                  <FileText size={20} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs font-bold truncate ${isMine ? 'text-white' : 'text-slate-900'}`}>{m.fileName}</p>
+                                  <p className={`text-[9px] font-black uppercase tracking-tight ${isMine ? 'text-indigo-200' : 'text-slate-400'}`}>
+                                    {(m.fileSize || 0) > 1024 * 1024 
+                                      ? `${((m.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB` 
+                                      : `${((m.fileSize || 0) / 1024).toFixed(1)} KB`}
+                                  </p>
+                                </div>
+                                <a 
+                                  href={m.mediaUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  className={`p-2 rounded-lg transition-all ${isMine ? 'bg-white/10 hover:bg-white/20 text-white' : 'bg-white border border-slate-200 text-indigo-600 hover:bg-slate-50 shadow-sm'}`}
+                                >
+                                  <Download size={16} />
+                                </a>
+                              </div>
+                            )}
+                            {m.youtubeMetadata && (
+                              <div className="mb-3 rounded-xl overflow-hidden border border-slate-200 bg-black group relative">
+                                <div className="aspect-video w-full bg-slate-900 flex items-center justify-center relative">
+                                  <iframe 
+                                    className="absolute inset-0 w-full h-full"
+                                    src={`https://www.youtube.com/embed/${m.youtubeMetadata.videoId}`}
+                                    title={m.youtubeMetadata.title}
+                                    frameBorder="0"
+                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                    allowFullScreen
+                                  />
+                                </div>
+                                <div className="p-3 bg-white border-t border-slate-100 flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <div className="w-8 h-8 rounded bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                                      <Youtube size={16} />
+                                    </div>
+                                    <p className="text-[11px] font-bold text-slate-900 truncate">{m.youtubeMetadata.title}</p>
+                                  </div>
+                                  <a 
+                                    href={`https://youtube.com/watch?v=${m.youtubeMetadata.videoId}`} 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 text-slate-400 hover:text-indigo-600 transition-colors"
+                                  >
+                                    <ExternalLink size={14} />
+                                  </a>
+                                </div>
                               </div>
                             )}
                             {m.mediaType === 'audio' && (
@@ -697,15 +831,46 @@ export default function Chat() {
             </div>
 
             <div className="p-3 md:p-6 border-t border-slate-100 bg-white shadow-lg">
+              {uploadingProgress !== null && (
+                <div className="mb-3">
+                  <div className="flex justify-between items-center mb-1">
+                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Uploading File...</p>
+                    <p className="text-[10px] font-black text-indigo-600">{Math.round(uploadingProgress)}%</p>
+                  </div>
+                  <div className="h-1.5 w-full bg-indigo-50 rounded-full overflow-hidden">
+                    <motion.div 
+                      className="h-full bg-indigo-600"
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadingProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <form onSubmit={handleSendMessage} className="flex gap-1 md:gap-2 items-center bg-slate-50 p-1.5 md:p-2 rounded-2xl border border-slate-200 shadow-inner focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-                <button 
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-2 md:p-3 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-none hover:shadow-sm shrink-0"
-                >
-                  <ImageIcon size={18} />
-                  <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
-                </button>
+                <div className="flex items-center">
+                  <button 
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-2 md:p-3 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-none hover:shadow-sm shrink-0"
+                  >
+                    <ImageIcon size={18} />
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleImageUpload} />
+                  </button>
+                  
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.accept = '.pdf,.ppt,.pptx,.doc,.docx,.zip';
+                      input.onchange = (e: any) => handleFileUpload(e);
+                      input.click();
+                    }}
+                    className="p-2 md:p-3 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-none hover:shadow-sm shrink-0"
+                  >
+                    <Paperclip size={18} />
+                  </button>
+                </div>
                 
                 <input 
                   type="text" 

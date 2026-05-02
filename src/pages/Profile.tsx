@@ -32,8 +32,56 @@ import {
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
 export default function Profile() {
-  const { profile: myProfile, isOnline } = useAuth();
+  const { profile: myProfile, isOnline, user: firebaseUser } = useAuth();
+  
+  const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+    const errInfo: FirestoreErrorInfo = {
+      error: error instanceof Error ? error.message : String(error),
+      authInfo: {
+        userId: firebaseUser?.uid,
+        email: firebaseUser?.email,
+        emailVerified: firebaseUser?.emailVerified,
+        isAnonymous: firebaseUser?.isAnonymous,
+        tenantId: firebaseUser?.tenantId,
+        providerInfo: firebaseUser?.providerData?.map(provider => ({
+          providerId: provider.providerId,
+          email: provider.email,
+        })) || []
+      },
+      operationType,
+      path
+    };
+    console.error('Firestore Error: ', JSON.stringify(errInfo));
+    throw new Error(JSON.stringify(errInfo));
+  };
+
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const viewUserId = searchParams.get('userId');
@@ -115,19 +163,21 @@ export default function Profile() {
   }, [profile?.photoURL]);
 
   useEffect(() => {
-    const fetchOtherProfile = async () => {
-      if (viewUserId && viewUserId !== myProfile?.uid) {
-        try {
-          const docSnap = await getDoc(doc(db, 'users', viewUserId));
-          if (docSnap.exists()) {
-            setViewProfile(docSnap.data() as UserProfileType);
-          }
-        } catch (err) {
-          console.error("Error fetching profile:", err);
-        }
+    if (!viewUserId || viewUserId === myProfile?.uid) {
+      setViewProfile(null);
+      return;
+    }
+    
+    // Real-time listener for the profile being viewed
+    const unsubscribe = onSnapshot(doc(db, 'users', viewUserId), (docSnap) => {
+      if (docSnap.exists()) {
+        setViewProfile({ ...docSnap.data(), uid: docSnap.id } as UserProfileType);
       }
-    };
-    fetchOtherProfile();
+    }, (err) => {
+      console.error("Error fetching profile:", err);
+    });
+    
+    return () => unsubscribe();
   }, [viewUserId, myProfile?.uid]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -383,13 +433,7 @@ export default function Profile() {
       setEditMode(false);
       alert('Profile updated successfully!');
     } catch (err: any) {
-      console.error('Error updating profile:', err);
-      // More specific error message
-      if (err.code === 'permission-denied') {
-        alert('Permission denied. Please ensure you are logged in and authorized.');
-      } else {
-        alert(`Failed to update profile: ${err.message || 'Unknown error'}`);
-      }
+      handleFirestoreError(err, OperationType.UPDATE, `users/${profile.uid}`);
     } finally {
       setUpdating(false);
     }

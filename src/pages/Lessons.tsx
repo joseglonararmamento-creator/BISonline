@@ -23,9 +23,16 @@ import {
   WifiOff,
   Trophy,
   ArrowRight,
-  ChevronLeft
+  ChevronLeft,
+  Sparkles,
+  MessageSquare,
+  Send,
+  Loader2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { GoogleGenAI } from "@google/genai";
+
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // Configure stores
 const lessonStore = localforage.createInstance({
@@ -48,6 +55,7 @@ export default function Lessons() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showStudyModal, setShowStudyModal] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [search, setSearch] = useState('');
   
@@ -393,7 +401,18 @@ export default function Lessons() {
                     </h3>
                   </div>
                   
-                  {/* Improved Quiz Link */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    {isOnline && (
+                      <button 
+                        onClick={() => setShowStudyModal(true)}
+                        className="px-6 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all hover:-translate-y-1 active:scale-95"
+                      >
+                        <Sparkles size={16} />
+                        Help Me Study
+                      </button>
+                    )}
+
+                    {/* Improved Quiz Link */}
                   {(() => {
                     const associatedQuiz = quizzes.find(q => q.lessonId === selectedLesson.id);
                     const isAvailable = associatedQuiz && (isOnline || offlineQuizIds.has(associatedQuiz.id));
@@ -412,7 +431,8 @@ export default function Lessons() {
                     );
                   })()}
                 </div>
-              </header>
+              </div>
+            </header>
 
               <div className="prose prose-slate max-w-none prose-headings:font-bold prose-p:text-slate-600 prose-p:leading-relaxed bg-slate-50/30 p-5 md:p-8 rounded-3xl border border-slate-100/50 text-sm md:text-base">
                 <ReactMarkdown>{selectedLesson.content}</ReactMarkdown>
@@ -618,7 +638,154 @@ export default function Lessons() {
           </div>
         )}
       </AnimatePresence>
+      
+      {selectedLesson && (
+        <StudyAssistantModal 
+          isOpen={showStudyModal} 
+          onClose={() => setShowStudyModal(false)} 
+          lessonTitle={selectedLesson.title} 
+          lessonContent={selectedLesson.content} 
+        />
+      )}
     </div>
+  );
+}
+
+function StudyAssistantModal({ isOpen, onClose, lessonTitle, lessonContent }: { isOpen: boolean, onClose: () => void, lessonTitle: string, lessonContent: string }) {
+  const [messages, setMessages] = useState<{ role: 'user' | 'model', text: string }[]>([
+    { role: 'model', text: `Hi! I'm your AI Study Assistant. I've read the module "**${lessonTitle}**". How can I help you understand it better? You can ask me to summarize it, explain a concept, or quiz you on the topics!` }
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, loading]);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || loading) return;
+
+    const userMessage = input.trim();
+    setInput('');
+    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+    setLoading(true);
+
+    try {
+      const history = messages.map(m => ({
+        role: m.role === 'model' ? 'model' : 'user',
+        parts: [{ text: m.text }]
+      }));
+
+      const model = ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: [
+          ...history,
+          { role: 'user', parts: [{ text: userMessage }] }
+        ],
+        config: {
+          systemInstruction: `You are a helpful and expert AI Study Assistant for a student. 
+          The student is currently studying a module titled: "${lessonTitle}".
+          Here is the full content of the module:
+          ---
+          ${lessonContent}
+          ---
+          Provide clear, concise, and educational explanations. Use analogies if helpful. 
+          Encourage critical thinking. If the user asks about something completely unrelated to the study context, gently steer them back to the topic.`
+        }
+      });
+
+      const response = await model;
+      setMessages(prev => [...prev, { role: 'model', text: response.text || "I'm sorry, I couldn't generate a response." }]);
+    } catch (err) {
+      console.error("AI Error:", err);
+      setMessages(prev => [...prev, { role: 'model', text: "Error: I'm having trouble connecting to my brain right now. Please try again later." }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col h-[80vh]"
+          >
+            <header className="p-5 bg-indigo-600 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black uppercase tracking-widest text-white">Study Assistant</h3>
+                  <p className="text-[10px] opacity-80 font-bold uppercase tracking-tighter line-clamp-1">{lessonTitle}</p>
+                </div>
+              </div>
+              <button 
+                onClick={onClose}
+                className="p-2 hover:bg-white/10 rounded-xl transition-colors"
+                aria-label="Close"
+              >
+                <X size={20} />
+              </button>
+            </header>
+
+            <div 
+              ref={scrollRef}
+              className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50 custom-scrollbar"
+            >
+              {messages.map((m, i) => (
+                <div 
+                  key={i} 
+                  className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div className={`max-w-[85%] rounded-2xl p-4 text-sm shadow-sm ${
+                    m.role === 'user' 
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-white text-slate-700 border border-slate-100 rounded-tl-none'
+                  }`}>
+                    <div className="prose prose-sm prose-slate max-w-none prose-p:leading-relaxed prose-p:m-0">
+                      <ReactMarkdown>{m.text}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {loading && (
+                <div className="flex justify-start">
+                  <div className="bg-white text-slate-400 border border-slate-150 rounded-2xl rounded-tl-none p-4 flex items-center gap-2 shadow-sm">
+                    <Loader2 size={16} className="animate-spin" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">AI is thinking...</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleSend} className="p-4 bg-white border-t border-slate-100 flex gap-3 shrink-0">
+              <input 
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                placeholder="Ask your AI study buddy anything..."
+                className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 outline-none font-medium text-slate-900"
+              />
+              <button 
+                type="submit"
+                disabled={!input.trim() || loading}
+                className="bg-indigo-600 text-white w-12 h-12 rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 active:scale-90 shrink-0"
+              >
+                <Send size={20} />
+              </button>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
   );
 }
 

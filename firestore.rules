@@ -64,6 +64,19 @@ service cloud.firestore {
         && data.status == 'submitted';
     }
 
+    function isValidComment(data) {
+      return data.parentId is string && data.parentId.size() > 0
+        && data.parentType is string && (data.parentType == 'post' || data.parentType == 'confession')
+        && data.authorId == request.auth.uid
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 1000;
+    }
+
+    function isValidConfession(data) {
+      return data.authorId == request.auth.uid
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.isAnonymous is bool;
+    }
+
     // --- Rules ---
 
     match /users/{userId} {
@@ -74,10 +87,25 @@ service cloud.firestore {
         && (
           incoming().diff(existing()).affectedKeys().hasOnly([
             'displayName', 'photoURL', 'role', 'classNumber', 'classId', 'classIds', 
-            'subjectHandled', 'yearsOfTeaching', 'gender', 'bio', 'isOnline', 'lastActive'
+            'subjectHandled', 'yearsOfTeaching', 'gender', 'bio', 'isOnline', 'lastActive', 'updatedAt'
           ])
           || isTeacher()
         );
+    }
+
+    match /confessions/{confessionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidConfession(incoming());
+      allow update: if isSignedIn() && (
+        (existing().authorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'isAnonymous']))
+        || (incoming().diff(existing()).affectedKeys().hasOnly(['likesCount']))
+      );
+      allow delete: if isSignedIn() && (existing().authorId == request.auth.uid || isTeacher());
+    }
+
+    match /confession_likes/{likeId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == likeId.split('_')[1];
     }
 
     match /posts/{postId} {
@@ -87,6 +115,12 @@ service cloud.firestore {
         (existing().authorId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['text', 'updatedAt']))
         || (incoming().diff(existing()).affectedKeys().hasOnly(['likes']))
       );
+      allow delete: if isSignedIn() && (existing().authorId == request.auth.uid || isTeacher());
+    }
+
+    match /comments/{commentId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidComment(incoming());
       allow delete: if isSignedIn() && (existing().authorId == request.auth.uid || isTeacher());
     }
 

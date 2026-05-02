@@ -2,13 +2,14 @@ import { useState, useEffect } from 'react';
 import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship } from '../types';
+import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
 import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
+import StudyAssistant from '../components/StudyAssistant';
 
 export default function Dashboard() {
   const { profile, isOnline, loading: authLoading } = useAuth();
@@ -298,7 +299,7 @@ export default function Dashboard() {
 
         {/* What's Latest Box (Standalone Status Box) - Social Media Main Feature */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">What's Latest, Teacher?</h3>
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">Academic Updates & Reminders</h3>
 
           <div className="flex items-start gap-4">
             <img src={profile?.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-indigo-50" alt="Me" />
@@ -327,43 +328,12 @@ export default function Dashboard() {
         <div className="space-y-6">
           <AnimatePresence mode="popLayout">
             {posts.map((post) => (
-              <motion.div 
-                key={post.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6"
-              >
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <img src={post.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover shadow-sm" alt="" />
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{post.authorName}</h4>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-                        {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Recently'}
-                      </p>
-                    </div>
-                  </div>
-                  {post.authorId === profile?.uid && (
-                    <button 
-                      onClick={() => setPostToDelete(post.id)}
-                      className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-                <p className="text-slate-700 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{post.text}</p>
-                <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
-                   <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors">
-                      <TrendingUp size={16} />
-                      <span className="text-[11px] font-black uppercase tracking-tighter">Heart</span>
-                   </button>
-                   <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors">
-                      <MessageSquare size={16} />
-                      <span className="text-[11px] font-black uppercase tracking-tighter">Comment</span>
-                   </button>
-                </div>
-              </motion.div>
+              <PostCard 
+                key={post.id} 
+                post={post} 
+                profile={profile} 
+                onDelete={() => setPostToDelete(post.id)} 
+              />
             ))}
 
             {lessons.map((lesson) => (
@@ -668,6 +638,8 @@ export default function Dashboard() {
         onClose={() => setIsShareModalOpen(false)} 
         url={window.location.origin} 
       />
+
+      <StudyAssistant />
     </div>
   );
 }
@@ -682,5 +654,158 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode, label:
       <p className="text-slate-500 text-sm font-medium mb-1">{label}</p>
       <h4 className="text-2xl font-black text-slate-900">{value}</h4>
     </div>
+  );
+}
+
+function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfile | null, onDelete: () => void }) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [showComments, setShowComments] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!post.id) return;
+    const q = query(
+      collection(db, 'comments'), 
+      where('parentId', '==', post.id),
+      where('parentType', '==', 'post'),
+      orderBy('createdAt', 'asc')
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setComments(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Comment)));
+    });
+    return () => unsubscribe();
+  }, [post.id]);
+
+  const handleAddComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile || !newComment.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'comments'), {
+        parentId: post.id,
+        parentType: 'post',
+        authorId: profile.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL,
+        text: newComment,
+        isAnonymous: false,
+        createdAt: serverTimestamp()
+      });
+
+      // Notify post author if it's not self
+      if (post.authorId !== profile.uid) {
+        await addDoc(collection(db, 'notifications'), {
+          userId: post.authorId,
+          type: 'post_comment',
+          authorId: profile.uid,
+          authorName: profile.displayName,
+          authorPhoto: profile.photoURL,
+          postId: post.id,
+          text: `${profile.displayName} commented on your post: "${newComment.substring(0, 30)}..."`,
+          isRead: false,
+          createdAt: serverTimestamp(),
+          link: '/'
+        });
+      }
+
+      setNewComment('');
+      setShowComments(true);
+    } catch (err) {
+      console.error("Comment error:", err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <img src={post.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover shadow-sm" alt="" />
+          <div>
+            <h4 className="text-sm font-bold text-slate-900">{post.authorName}</h4>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+              {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Recently'}
+            </p>
+          </div>
+        </div>
+        {post.authorId === profile?.uid && (
+          <button 
+            onClick={onDelete}
+            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+          >
+            <Trash2 size={16} />
+          </button>
+        )}
+      </div>
+      <p className="text-slate-700 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{post.text}</p>
+      <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
+          <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors">
+            <TrendingUp size={16} />
+            <span className="text-[11px] font-black uppercase tracking-tighter">Heart</span>
+          </button>
+          <button 
+            onClick={() => setShowComments(!showComments)}
+            className={`flex items-center gap-2 transition-colors ${showComments ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
+          >
+            <MessageSquare size={16} />
+            <span className="text-[11px] font-black uppercase tracking-tighter">
+              {comments.length > 0 ? `${comments.length} Comments` : 'Comment'}
+            </span>
+          </button>
+      </div>
+
+      <AnimatePresence>
+        {showComments && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="pt-6 space-y-4">
+              {comments.map((comment) => (
+                <div key={comment.id} className="flex gap-3">
+                  <img src={comment.authorPhoto || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-slate-100" alt="" />
+                  <div className="flex-1 bg-slate-50 rounded-2xl p-3">
+                    <div className="flex items-center justify-between mb-1">
+                      <h5 className="text-[11px] font-bold text-slate-900">{comment.authorName}</h5>
+                      <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">
+                        {comment.createdAt ? format(comment.createdAt.toDate(), 'h:mm a') : 'Now'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 leading-relaxed">{comment.text}</p>
+                  </div>
+                </div>
+              ))}
+
+              <form onSubmit={handleAddComment} className="flex gap-3 pt-2">
+                <img src={profile?.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-slate-100" alt="" />
+                <div className="flex-1 relative">
+                  <input 
+                    value={newComment}
+                    onChange={e => setNewComment(e.target.value)}
+                    placeholder="Write a comment..."
+                    className="w-full bg-slate-50 border border-slate-100 rounded-full py-2 px-4 text-xs pr-10 outline-none focus:ring-2 focus:ring-indigo-500/20 transition-all font-medium"
+                  />
+                  <button 
+                    disabled={!newComment.trim() || isSubmitting}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-indigo-600 disabled:text-slate-300 transition-colors"
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }

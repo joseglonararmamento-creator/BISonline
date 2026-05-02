@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // Use onSnapshot for real-time profile updates
         unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists()) {
-            const data = docSnap.data() as UserProfile;
+            const data = { ...docSnap.data(), uid: docSnap.id } as UserProfile;
             setProfile(data);
             
             // If profile exists but role is missing, we need onboarding

@@ -30,7 +30,8 @@ import {
   Send,
   MessageCircle,
   Plus,
-  Check
+  Check,
+  Ghost
 } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -47,6 +48,7 @@ import QuizHistory from './pages/QuizHistory';
 import TeacherInsights from './pages/TeacherInsights';
 import Profile from './pages/Profile';
 import TeacherClasses from './pages/TeacherClasses';
+import Confessions from './pages/Confessions';
 
 const Sidebar = () => {
   const { profile } = useAuth();
@@ -58,6 +60,7 @@ const Sidebar = () => {
     { to: '/assignments', icon: <ClipboardList size={20} />, label: 'Assignments' },
     { to: '/calendar', icon: <Calendar size={20} />, label: 'Calendar' },
     { to: '/chat', icon: <MessageSquare size={20} />, label: 'Messages' },
+    { to: '/confessions', icon: <Ghost size={20} />, label: 'Confessions' },
     { to: '/quiz-history', icon: <Trophy size={20} />, label: 'Quiz History' },
     { to: '/profile', icon: <User size={20} />, label: 'My Profile' },
   ];
@@ -107,6 +110,7 @@ const MobileNav = () => {
   const links = [
     { to: '/', icon: <Home size={24} />, label: 'Home' },
     { to: '/lessons', icon: <BookOpen size={24} />, label: 'Lessons' },
+    { to: '/confessions', icon: <Ghost size={24} />, label: 'Confessions' },
     { to: '/chat', icon: <MessageSquare size={24} />, label: 'Chat' },
     { to: '/profile', icon: <User size={24} />, label: 'Profile' },
   ];
@@ -275,7 +279,7 @@ const Navbar = () => {
       // Notify student
       await addDoc(collection(db, 'notifications'), {
         userId: notif.authorId,
-        type: 'post_liked', // General
+        type: 'class_accepted', 
         authorId: profile?.uid,
         authorName: profile?.displayName,
         authorPhoto: profile?.photoURL,
@@ -798,6 +802,7 @@ export default function App() {
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/lessons" element={<ProtectedRoute><Lessons /></ProtectedRoute>} />
             <Route path="/assignments" element={<ProtectedRoute><Assignments /></ProtectedRoute>} />
+            <Route path="/confessions" element={<ProtectedRoute><Confessions /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
             <Route path="/chat" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
             <Route path="/insights" element={<ProtectedRoute><TeacherInsights /></ProtectedRoute>} />

@@ -57,6 +57,30 @@ export interface Post {
   likes?: number;
 }
 
+export interface Comment {
+  id: string;
+  parentId: string;
+  parentType: 'post' | 'confession';
+  authorId: string;
+  authorName: string;
+  authorPhoto: string;
+  text: string;
+  isAnonymous?: boolean;
+  createdAt: any;
+}
+
+export interface Confession {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorPhoto: string;
+  text: string;
+  imageUrl?: string;
+  isAnonymous: boolean;
+  likesCount?: number;
+  createdAt: any;
+}
+
 export interface Assignment {
   id: string;
   lessonId: string;
@@ -110,7 +134,14 @@ export interface Message {
   classNumber?: string; // Legacy: For class-based chats
   text?: string;
   mediaUrl?: string;
-  mediaType?: 'image' | 'audio' | 'emoji';
+  mediaType?: 'image' | 'audio' | 'emoji' | 'file';
+  fileName?: string;
+  fileSize?: number;
+  youtubeMetadata?: {
+    videoId: string;
+    title: string;
+    thumbnailUrl: string;
+  };
   createdAt: any;
   reactions?: Record<string, string[]>; // emoji -> list of userIds
   readBy?: string[]; // list of userIds
@@ -127,7 +158,7 @@ export interface Friendship {
 export interface Notification {
   id: string;
   userId: string;
-  type: 'friend_request' | 'new_post' | 'post_liked' | 'class_join_request';
+  type: 'friend_request' | 'new_post' | 'post_liked' | 'class_join_request' | 'post_comment' | 'class_accepted' | 'confession_liked' | 'confession_comment';
   authorId: string;
   authorName: string;
   authorPhoto: string;

@@ -112,6 +112,38 @@
       },
       "required": ["authorId", "authorName", "text"]
     },
+    "Comment": {
+      "title": "Comment",
+      "description": "User comments on posts or confessions",
+      "type": "object",
+      "properties": {
+        "parentId": { "type": "string" },
+        "parentType": { "type": "string", "enum": ["post", "confession"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "isAnonymous": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["parentId", "parentType", "authorId", "authorName", "text"]
+    },
+    "Confession": {
+      "title": "Confession",
+      "description": "Anonymous or public user thoughts",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "isAnonymous": { "type": "boolean" },
+        "likesCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "text", "isAnonymous"]
+    },
     "Reminder": {
       "title": "Reminder",
       "description": "Teacher status updates and class reminders",
@@ -157,7 +189,7 @@
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "type": { "type": "string", "enum": ["friend_request", "new_post", "post_liked", "class_join_request"] },
+        "type": { "type": "string", "enum": ["friend_request", "new_post", "post_liked", "class_join_request", "post_comment"] },
         "authorId": { "type": "string" },
         "authorName": { "type": "string" },
         "authorPhoto": { "type": "string" },
@@ -196,6 +228,8 @@
     "reminders": { "schema": "Reminder", "description": "Teacher status updates and class reminders" },
     "classes": { "schema": "Class", "description": "Classroom groups" },
     "posts": { "schema": "Post", "description": "User status updates" },
+    "confessions": { "schema": "Confession", "description": "Anonymous or public confessions" },
+    "comments": { "schema": "Comment", "description": "User comments on posts or confessions" },
     "friends": { "schema": "Friendship", "description": "User connections" }
   }
 }
