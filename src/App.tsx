@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
-import { doc, setDoc } from 'firebase/firestore';
+import { HashRouter as Router, Routes, Route, Navigate, Link, useLocation, useNavigate } from 'react-router-dom';
+import { doc, setDoc, collection, query, where, orderBy, limit, onSnapshot, updateDoc, deleteDoc, addDoc, getDoc, getDocs, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { db } from './firebase';
-import { UserRole } from './types';
+import { UserRole, Post, Notification, Friendship, UserProfile, Class } from './types';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   BookOpen, 
@@ -22,8 +22,17 @@ import {
   LayoutGrid,
   Search,
   Bell,
-  Home
+  Home,
+  UserCheck,
+  UserPlus,
+  Eye,
+  CheckCircle2,
+  Send,
+  MessageCircle,
+  Plus,
+  Check
 } from 'lucide-react';
+import { format } from 'date-fns';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
@@ -38,8 +47,6 @@ import QuizHistory from './pages/QuizHistory';
 import TeacherInsights from './pages/TeacherInsights';
 import Profile from './pages/Profile';
 import TeacherClasses from './pages/TeacherClasses';
-
-
 
 const Sidebar = () => {
   const { profile } = useAuth();
@@ -126,14 +133,162 @@ const MobileNav = () => {
 
 const Navbar = () => {
   const { profile, logout, isOnline } = useAuth();
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const location = useLocation();
+  const navigate = useNavigate();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [teacherClasses, setTeacherClasses] = useState<Class[]>([]);
+  const [showClassSelector, setShowClassSelector] = useState<{ userId: string, userName: string } | null>(null);
 
-  const switchRole = async () => {
-    if (!profile) return;
-    const newRole = profile.role === 'teacher' ? 'student' : 'teacher';
-    await setDoc(doc(db, 'users', profile.uid), { role: newRole }, { merge: true });
-    window.location.reload(); 
+  useEffect(() => {
+    if (profile?.role === 'teacher') {
+      const q = query(collection(db, 'classes'), where('teacherId', '==', profile.uid));
+      getDocs(q).then(snap => {
+        setTeacherClasses(snap.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
+      });
+    }
+  }, [profile?.uid, profile?.role]);
+
+  useEffect(() => {
+    const search = async () => {
+      if (searchQuery.trim().length < 2) {
+        setSearchResults([]);
+        return;
+      }
+      setSearching(true);
+      try {
+        const q = query(
+          collection(db, 'users'),
+          orderBy('displayName'),
+          where('displayName', '>=', searchQuery),
+          where('displayName', '<=', searchQuery + '\uf8ff'),
+          limit(5)
+        );
+        const snap = await getDocs(q);
+        setSearchResults(snap.docs.map(d => d.data() as UserProfile).filter(u => u.uid !== profile?.uid));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(search, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, profile?.uid]);
+
+  const handleAddStudentToClass = async (studentId: string, classId: string, className: string) => {
+    try {
+      await updateDoc(doc(db, 'users', studentId), {
+        classIds: arrayUnion(classId)
+      });
+      alert(`Added student to ${className}`);
+      setShowClassSelector(null);
+      setSearchQuery('');
+    } catch (err) {
+       console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    if (!profile?.uid || !isOnline) return;
+    const q = query(
+      collection(db, 'notifications'),
+      where('userId', '==', profile.uid),
+      orderBy('createdAt', 'desc'),
+      limit(20)
+    );
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const notifs = snap.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
+      setNotifications(notifs);
+      setUnreadCount(notifs.filter(n => !n.isRead).length);
+    });
+    return () => unsubscribe();
+  }, [profile?.uid, isOnline]);
+
+  const handleNotificationClick = async (notif: Notification) => {
+    if (!notif.isRead) {
+      await updateDoc(doc(db, 'notifications', notif.id), { isRead: true });
+    }
+
+    if (notif.type === 'new_post' && notif.postId) {
+      const postSnap = await getDoc(doc(db, 'posts', notif.postId));
+      if (postSnap.exists()) {
+        setSelectedPost({ id: postSnap.id, ...postSnap.data() } as Post);
+      }
+    } else if (notif.link) {
+      navigate(notif.link);
+      setShowNotifications(false);
+    }
+  };
+
+  const handleAcceptFriend = async (notif: Notification) => {
+    try {
+      const friendshipId = profile?.uid < notif.authorId ? `${profile?.uid}_${notif.authorId}` : `${notif.authorId}_${profile?.uid}`;
+      await updateDoc(doc(db, 'friends', friendshipId), { status: 'accepted' });
+      await updateDoc(doc(db, 'notifications', notif.id), { isRead: true });
+      
+      // Notify them back
+      await addDoc(collection(db, 'notifications'), {
+        userId: notif.authorId,
+        type: 'post_liked', // Using as general activity
+        authorId: profile?.uid,
+        authorName: profile?.displayName,
+        authorPhoto: profile?.photoURL,
+        text: `${profile?.displayName} accepted your friend request!`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        link: `/profile?userId=${profile?.uid}`
+      });
+      
+      alert('You are now friends!');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeclineFriend = async (notif: Notification) => {
+    try {
+      if (notif.type === 'friend_request') {
+        const friendshipId = profile?.uid < notif.authorId ? `${profile?.uid}_${notif.authorId}` : `${notif.authorId}_${profile?.uid}`;
+        await deleteDoc(doc(db, 'friends', friendshipId));
+      }
+      await updateDoc(doc(db, 'notifications', notif.id), { isRead: true });
+      alert('Request declined.');
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleAcceptClassJoin = async (notif: Notification) => {
+    if (!notif.classId) return;
+    try {
+      await updateDoc(doc(db, 'users', notif.authorId), {
+        classIds: arrayUnion(notif.classId)
+      });
+      await updateDoc(doc(db, 'notifications', notif.id), { isRead: true });
+      
+      // Notify student
+      await addDoc(collection(db, 'notifications'), {
+        userId: notif.authorId,
+        type: 'post_liked', // General
+        authorId: profile?.uid,
+        authorName: profile?.displayName,
+        authorPhoto: profile?.photoURL,
+        text: `Your request to join ${notif.className} has been accepted!`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        link: '/profile'
+      });
+      
+      alert('Student added to class!');
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
@@ -145,22 +300,243 @@ const Navbar = () => {
         </Link>
       </div>
 
-      <div className="flex-1 max-w-md px-4">
+      <div className="flex-1 max-w-md px-4 relative">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
           <input 
             type="text" 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search BISonline..."
             className="w-full bg-slate-100 border-none rounded-full py-1.5 pl-9 pr-4 text-sm focus:ring-2 focus:ring-indigo-500 outline-none placeholder:text-slate-500"
           />
         </div>
+
+        {/* Search Results Dropdown */}
+        <AnimatePresence>
+          {searchQuery.trim().length >= 2 && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute top-full left-4 bg-white mt-1 w-[calc(100%-32px)] border border-slate-100 rounded-2xl shadow-2xl z-[150] overflow-hidden"
+            >
+              <div className="max-h-[300px] overflow-y-auto">
+                {searching ? (
+                  <div className="p-8 text-center">
+                    <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Searching...</p>
+                  </div>
+                ) : searchResults.length === 0 ? (
+                  <div className="p-8 text-center text-slate-400 text-xs italic">No members found.</div>
+                ) : (
+                  searchResults.map(user => (
+                    <div key={user.uid} className="p-3 border-b border-slate-50 hover:bg-slate-50 flex items-center justify-between group">
+                      <div 
+                        className="flex items-center gap-3 cursor-pointer flex-1"
+                        onClick={() => {
+                          navigate(`/profile?userId=${user.uid}`);
+                          setSearchQuery('');
+                        }}
+                      >
+                        <img src={user.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-slate-200" alt="" />
+                        <div>
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{user.displayName}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{user.role}</p>
+                        </div>
+                      </div>
+                      {profile?.role === 'teacher' && user.role === 'student' && (
+                        <button 
+                          onClick={() => setShowClassSelector({ userId: user.uid, userName: user.displayName || 'Student' })}
+                          className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                        >
+                          Add to Class
+                        </button>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Class Selector for Teacher */}
+        <AnimatePresence>
+          {showClassSelector && (
+            <div className="fixed inset-0 flex items-center justify-center z-[200] p-4">
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setShowClassSelector(null)}
+                className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-6 border border-slate-100"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Add Student to Class</h3>
+                    <p className="text-lg font-black text-slate-900">{showClassSelector.userName}</p>
+                  </div>
+                  <button onClick={() => setShowClassSelector(null)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-all">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {teacherClasses.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-4 italic">You haven't created any classes yet.</p>
+                  ) : (
+                    teacherClasses.map(cls => (
+                      <button 
+                        key={cls.id}
+                        onClick={() => handleAddStudentToClass(showClassSelector.userId, cls.id, cls.name)}
+                        className="w-full p-4 bg-slate-50 hover:bg-indigo-50 border border-slate-100 rounded-2xl text-left flex items-center justify-between group transition-all"
+                      >
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600">{cls.name}</h4>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{cls.inviteCode}</p>
+                        </div>
+                        <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-indigo-600 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Check size={18} />
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative">
+      <div className="flex items-center gap-2 relative">
+        <button 
+          onClick={() => setShowNotifications(!showNotifications)}
+          className="p-2 text-slate-600 hover:bg-slate-100 rounded-full transition-colors relative"
+        >
           <Bell size={20} />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          {unreadCount > 0 && (
+            <span className="absolute top-1.5 right-1.5 w-4 h-4 bg-red-500 rounded-full border-2 border-white text-[8px] text-white flex items-center justify-center font-bold">
+              {unreadCount}
+            </span>
+          )}
         </button>
+
+        <AnimatePresence>
+          {showNotifications && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute top-full right-0 mt-2 w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden z-[100]"
+            >
+              <div className="p-4 border-b border-slate-50 flex items-center justify-between">
+                <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Friend Activities</h3>
+                <button 
+                  onClick={async () => {
+                     const unread = notifications.filter(n => !n.isRead);
+                     for (const n of unread) {
+                       await updateDoc(doc(db, 'notifications', n.id), { isRead: true });
+                     }
+                  }}
+                  className="text-[9px] font-black text-indigo-600 uppercase hover:underline"
+                >
+                  Mark all as read
+                </button>
+              </div>
+              <div className="max-h-[400px] overflow-y-auto custom-scrollbar">
+                {notifications.length === 0 ? (
+                  <div className="p-8 text-center">
+                    <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                      <Bell size={20} className="text-slate-300" />
+                    </div>
+                    <p className="text-xs text-slate-400 italic">No new notifications.</p>
+                  </div>
+                ) : (
+                  notifications.map((n) => (
+                    <div 
+                      key={n.id}
+                      onClick={() => handleNotificationClick(n)}
+                      className={`p-4 border-b border-slate-50 hover:bg-slate-50 transition-colors cursor-pointer flex gap-3 ${n.isRead ? 'opacity-60' : 'bg-indigo-50/20'}`}
+                    >
+                      <div className="shrink-0 pt-1">
+                        <img src={n.authorPhoto || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover border border-slate-200" alt="" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-slate-700 leading-snug">
+                          <span className="font-bold text-slate-900">{n.authorName}</span> {n.text.replace(n.authorName, '')}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1">
+                          {n.createdAt ? format(n.createdAt.toDate(), 'MMM d, h:mm a') : 'Now'}
+                        </p>
+                        {n.type === 'friend_request' && !n.isRead && (
+                          <div className="flex gap-2 mt-2">
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 handleAcceptFriend(n);
+                               }}
+                               className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-black text-[9px] uppercase tracking-widest flex items-center gap-1 shadow-md shadow-indigo-100"
+                             >
+                               <UserCheck size={10} /> Accept
+                             </button>
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 handleDeclineFriend(n);
+                               }}
+                               className="px-3 py-1 bg-white border border-slate-200 text-slate-500 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-slate-50"
+                             >
+                               Decline
+                             </button>
+                          </div>
+                        )}
+                        {n.type === 'class_join_request' && !n.isRead && (
+                          <div className="flex gap-2 mt-2">
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 handleAcceptClassJoin(n);
+                               }}
+                               className="px-3 py-1 bg-indigo-600 text-white rounded-lg font-black text-[9px] uppercase tracking-widest flex items-center gap-1 shadow-md shadow-indigo-100"
+                             >
+                               <Check size={10} /> Accept
+                             </button>
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 handleDeclineFriend(n); // Can reuse decline logic since it just deletes and marks read
+                               }}
+                               className="px-3 py-1 bg-white border border-slate-200 text-slate-500 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-slate-50"
+                             >
+                               Decline
+                             </button>
+                          </div>
+                        )}
+                      </div>
+                      {!n.isRead && <div className="w-2 h-2 bg-indigo-600 rounded-full mt-2 shrink-0"></div>}
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="p-3 bg-slate-50 text-center">
+                 <Link 
+                   to="/" 
+                   onClick={() => setShowNotifications(false)}
+                   className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-indigo-600 transition-all"
+                 >
+                   Clear all cleared
+                 </Link>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         <div className="hidden sm:flex items-center gap-2 pl-2 border-l border-slate-100 italic text-[10px] text-slate-400 uppercase tracking-widest font-black pr-2">
            {profile?.role} 
@@ -181,6 +557,59 @@ const Navbar = () => {
           <LogOut size={20} />
         </button>
       </div>
+
+      {/* Post Popup Modal */}
+      <AnimatePresence>
+        {selectedPost && (
+          <div className="fixed inset-0 flex items-center justify-center z-[200] p-4">
+             <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedPost(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-slate-100"
+            >
+              <div className="p-4 border-b border-slate-50 flex items-center justify-between">
+                 <div className="flex items-center gap-3">
+                    <img src={selectedPost.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover" alt="" />
+                    <div>
+                       <h4 className="text-sm font-bold text-slate-900">{selectedPost.authorName}</h4>
+                       <p className="text-[10px] text-slate-400 uppercase font-bold tracking-tight">Status Update</p>
+                    </div>
+                 </div>
+                 <button 
+                  onClick={() => setSelectedPost(null)}
+                  className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-all"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-8">
+                 <p className="text-lg text-slate-700 leading-relaxed whitespace-pre-wrap">{selectedPost.text}</p>
+              </div>
+              <div className="p-6 bg-slate-50 flex items-center justify-between border-t border-slate-100">
+                 <div className="flex items-center gap-4">
+                    <button className="flex items-center gap-2 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:text-indigo-600 transition-all">
+                       <TrendingUp size={16} /> Heart
+                    </button>
+                    <button className="flex items-center gap-2 text-slate-500 font-black text-[10px] uppercase tracking-widest hover:text-indigo-600 transition-all">
+                       <MessageSquare size={16} /> Comment
+                    </button>
+                 </div>
+                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+                    {selectedPost.createdAt ? format(selectedPost.createdAt.toDate(), 'MMM d, h:mm a') : 'Recent'}
+                 </span>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </header>
   );
 };

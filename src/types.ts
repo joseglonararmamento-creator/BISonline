@@ -116,13 +116,28 @@ export interface Message {
   readBy?: string[]; // list of userIds
 }
 
+export interface Friendship {
+  id: string;
+  user1: string;
+  user2: string;
+  status: 'pending' | 'accepted';
+  createdAt: any;
+}
+
 export interface Notification {
   id: string;
   userId: string;
-  title: string;
-  body: string;
-  read: boolean;
+  type: 'friend_request' | 'new_post' | 'post_liked' | 'class_join_request';
+  authorId: string;
+  authorName: string;
+  authorPhoto: string;
+  text: string;
+  link?: string;
+  isRead: boolean;
   createdAt: any;
+  postId?: string;
+  classId?: string;
+  className?: string;
 }
 
 export interface CalendarEvent {

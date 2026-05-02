@@ -138,17 +138,38 @@
       },
       "required": ["name", "inviteCode", "teacherId"]
     },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Connection between two users",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "user1": { "type": "string" },
+        "user2": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user1", "user2", "status"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "In-app alerts",
       "type": "object",
       "properties": {
         "userId": { "type": "string" },
-        "title": { "type": "string" },
-        "body": { "type": "string" },
-        "read": { "type": "boolean" },
-        "createdAt": { "type": "string", "format": "date-time" }
-      }
+        "type": { "type": "string", "enum": ["friend_request", "new_post", "post_liked", "class_join_request"] },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "link": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "postId": { "type": "string" },
+        "classId": { "type": "string" },
+        "className": { "type": "string" }
+      },
+      "required": ["userId", "type", "text", "isRead"]
     },
     "CalendarEvent": {
       "title": "CalendarEvent",
@@ -174,6 +195,7 @@
     "calendarEvents": { "schema": "CalendarEvent", "description": "Shared calendar dates" },
     "reminders": { "schema": "Reminder", "description": "Teacher status updates and class reminders" },
     "classes": { "schema": "Class", "description": "Classroom groups" },
-    "posts": { "schema": "Post", "description": "User status updates" }
+    "posts": { "schema": "Post", "description": "User status updates" },
+    "friends": { "schema": "Friendship", "description": "User connections" }
   }
 }

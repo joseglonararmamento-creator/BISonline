@@ -151,9 +151,17 @@ service cloud.firestore {
     }
 
     match /notifications/{notificationId} {
-      allow read: if isOwner(existing().userId);
+      allow read: if isOwner(resource.data.userId);
       allow create: if isSignedIn();
-      allow update: if isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+      allow update: if isOwner(resource.data.userId) && incoming().diff(existing()).affectedKeys().hasOnly(['isRead']);
+      allow delete: if isOwner(resource.data.userId);
+    }
+
+    match /friends/{friendshipId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.user1) || isOwner(resource.data.user2));
+      allow create: if isSignedIn() && incoming().user1 == request.auth.uid;
+      allow update: if isSignedIn() && (isOwner(resource.data.user1) || isOwner(resource.data.user2)) && incoming().diff(existing()).affectedKeys().hasOnly(['status']);
+      allow delete: if isSignedIn() && (isOwner(resource.data.user1) || isOwner(resource.data.user2));
     }
 
     match /calendarEvents/{eventId} {

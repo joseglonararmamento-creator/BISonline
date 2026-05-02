@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, addDoc, serverTimestamp, onSnapshot, limit, orderBy, arrayUnion, getDoc, setDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, uploadBytesResumable } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType } from '../types';
+import { Assignment, Submission, Class, Reminder, UserProfile as UserProfileType, Friendship } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import imageCompression from 'browser-image-compression';
 import { 
@@ -25,7 +25,9 @@ import {
   LayoutGrid,
   Bell,
   Users,
-  ChevronLeft
+  ChevronLeft,
+  UserPlus,
+  Check
 } from 'lucide-react';
 import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -39,7 +41,56 @@ export default function Profile() {
   const isOwnProfile = !viewUserId || viewUserId === myProfile?.uid;
   const profile = isOwnProfile ? myProfile : viewProfile;
   
-  // Student specific
+  const [friendship, setFriendship] = useState<Friendship | null>(null);
+  const [requesting, setRequesting] = useState(false);
+
+  // ... (assignments, submissions, classes, etc)
+
+  useEffect(() => {
+    if (!myProfile || !viewUserId || isOwnProfile) return;
+    const friendshipId = myProfile.uid < viewUserId ? `${myProfile.uid}_${viewUserId}` : `${viewUserId}_${myProfile.uid}`;
+    const unsubscribe = onSnapshot(doc(db, 'friends', friendshipId), (doc) => {
+      if (doc.exists()) {
+        setFriendship({ id: doc.id, ...doc.data() } as Friendship);
+      } else {
+        setFriendship(null);
+      }
+    });
+    return () => unsubscribe();
+  }, [myProfile?.uid, viewUserId, isOwnProfile]);
+
+  const handleAddFriend = async () => {
+    if (!myProfile || !viewUserId || requesting) return;
+    setRequesting(true);
+    try {
+      const friendshipId = myProfile.uid < viewUserId ? `${myProfile.uid}_${viewUserId}` : `${viewUserId}_${myProfile.uid}`;
+      await setDoc(doc(db, 'friends', friendshipId), {
+        user1: myProfile.uid,
+        user2: viewUserId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      }, { merge: true });
+
+      // Notification
+      await addDoc(collection(db, 'notifications'), {
+        userId: viewUserId,
+        type: 'friend_request',
+        authorId: myProfile.uid,
+        authorName: myProfile.displayName,
+        authorPhoto: myProfile.photoURL,
+        text: `${myProfile.displayName} wants to connect with you.`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        link: `/profile?userId=${myProfile.uid}`
+      });
+
+      alert('Connection request sent!');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequesting(false);
+    }
+  };
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   
@@ -366,6 +417,31 @@ export default function Profile() {
     </div>
   );
 
+  const handleRequestJoinClass = async (classId: string, className: string, teacherId: string) => {
+    if (!myProfile || requesting) return;
+    setRequesting(true);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: teacherId,
+        type: 'class_join_request',
+        authorId: myProfile.uid,
+        authorName: myProfile.displayName,
+        authorPhoto: myProfile.photoURL,
+        classId: classId,
+        className: className,
+        text: `${myProfile.displayName} requested to join your class: ${className}`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        link: `/profile?userId=${myProfile.uid}`
+      });
+      alert('Join request sent to teacher!');
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   const studentStats = profile?.role === 'student' ? {
     completedCount: submissions.filter(s => s.status === 'graded' || s.status === 'submitted').length,
     progress: assignments.length > 0 ? (submissions.filter(s => s.status === 'graded' || s.status === 'submitted').length / assignments.length) * 100 : 0
@@ -444,12 +520,28 @@ export default function Profile() {
                   {editMode ? 'Cancel Edit' : 'Edit Profile'}
                 </button>
               ) : (
-                <button 
-                  onClick={() => navigate(`/chat?userId=${profile?.uid}`)}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-2"
-                >
-                  <MessageCircle size={14} /> Message
-                </button>
+                <>
+                  {friendship ? (
+                    <div className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 ${friendship.status === 'accepted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
+                      {friendship.status === 'accepted' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
+                      {friendship.status === 'accepted' ? 'Friends' : 'Pending Request'}
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={handleAddFriend}
+                      disabled={requesting}
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all"
+                    >
+                      <UserPlus size={14} /> {requesting ? 'Sending...' : 'Add Friend'}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => navigate(`/chat?userId=${profile?.uid}`)}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg font-bold text-xs shadow-sm hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <MessageCircle size={14} /> Message
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -617,14 +709,29 @@ export default function Profile() {
                 ))
              ) : (
                 classes.map(c => (
-                  <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
-                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
-                      <Users size={20} />
+                  <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
+                        <Users size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.inviteCode} • Master</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{c.name}</h4>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{c.inviteCode} • Master</p>
-                    </div>
+                    {profile.role === 'teacher' && myProfile?.role === 'student' && !myProfile.classIds?.includes(c.id) && (
+                      <button 
+                        onClick={() => handleRequestJoinClass(c.id, c.name, profile.uid)}
+                        className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-sm"
+                      >
+                        Request Join
+                      </button>
+                    )}
+                    {myProfile?.classIds?.includes(c.id) && (
+                      <div className="px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg font-black text-[9px] uppercase tracking-widest border border-emerald-100 flex items-center gap-1">
+                        <Check size={10} /> Joined
+                      </div>
+                    )}
                   </div>
                 ))
              )}

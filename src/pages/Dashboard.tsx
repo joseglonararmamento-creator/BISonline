@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
-import { Lesson, Assignment, Submission, Reminder, UserProfile, Post } from '../types';
+import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send } from 'lucide-react';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
@@ -26,12 +26,57 @@ export default function Dashboard() {
   const [interactions, setInteractions] = useState<{ [key: string]: { hearts: number, comments: any[] } }>({});
   const [newPostText, setNewPostText] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [friends, setFriends] = useState<Friendship[]>([]);
+  const [postToDelete, setPostToDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeletePost = async () => {
+    if (!postToDelete) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'posts', postToDelete));
+      setPostToDelete(null);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleAddFriend = async (targetUserId: string) => {
+    if (!profile) return;
+    try {
+      const friendshipId = profile.uid < targetUserId ? `${profile.uid}_${targetUserId}` : `${targetUserId}_${profile.uid}`;
+      await setDoc(doc(db, 'friends', friendshipId), {
+        user1: profile.uid,
+        user2: targetUserId,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      }, { merge: true });
+
+      // Create notification
+      await addDoc(collection(db, 'notifications'), {
+        userId: targetUserId,
+        type: 'friend_request',
+        authorId: profile.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL,
+        text: `${profile.displayName} sent you a friend request`,
+        isRead: false,
+        createdAt: serverTimestamp(),
+        link: `/profile?userId=${profile.uid}`
+      });
+      alert('Friend request sent!');
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handlePostUpdate = async () => {
     if (!profile || !newPostText.trim()) return;
     setPublishing(true);
     try {
-      await addDoc(collection(db, 'posts'), {
+      const postRef = await addDoc(collection(db, 'posts'), {
         authorId: profile.uid,
         authorName: profile.displayName,
         photoURL: profile.photoURL,
@@ -39,6 +84,25 @@ export default function Dashboard() {
         createdAt: serverTimestamp(),
         likes: 0
       });
+
+      // Notify accepted friends
+      const myFriends = friends.filter(f => f.status === 'accepted');
+      for (const friendship of myFriends) {
+        const friendId = friendship.user1 === profile.uid ? friendship.user2 : friendship.user1;
+        await addDoc(collection(db, 'notifications'), {
+          userId: friendId,
+          type: 'new_post',
+          authorId: profile.uid,
+          authorName: profile.displayName,
+          authorPhoto: profile.photoURL,
+          postId: postRef.id,
+          text: `${profile.displayName} posted a new update: "${newPostText.substring(0, 30)}..."`,
+          isRead: false,
+          createdAt: serverTimestamp(),
+          link: '/' // Redirect to dashboard
+        });
+      }
+
       setNewPostText('');
     } catch (err) {
       console.error(err);
@@ -46,6 +110,46 @@ export default function Dashboard() {
       setPublishing(false);
     }
   };
+
+  const handleStatHeart = (id: string) => {
+    setInteractions(prev => ({
+      ...prev,
+      [id]: {
+        hearts: (prev[id]?.hearts || 0) + 1,
+        comments: prev[id]?.comments || []
+      }
+    }));
+  };
+
+  useEffect(() => {
+    if (!profile?.uid || !isOnline) return;
+    const q = query(
+      collection(db, 'friends'),
+      where('user1', '==', profile.uid)
+    );
+    const q2 = query(
+      collection(db, 'friends'),
+      where('user2', '==', profile.uid)
+    );
+    
+    // Combine snapshots (simple version)
+    const unsub1 = onSnapshot(q, (snap1) => {
+      const f1 = snap1.docs.map(d => ({ id: d.id, ...d.data() as object } as Friendship));
+      setFriends(prev => {
+        const other = prev.filter(f => f.user2 === profile.uid);
+        return [...f1, ...other];
+      });
+    });
+    const unsub2 = onSnapshot(q2, (snap2) => {
+      const f2 = snap2.docs.map(d => ({ id: d.id, ...d.data() as object } as Friendship));
+      setFriends(prev => {
+        const other = prev.filter(f => f.user1 === profile.uid);
+        return [...other, ...f2];
+      });
+    });
+
+    return () => { unsub1(); unsub2(); };
+  }, [profile?.uid, isOnline]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,18 +162,18 @@ export default function Dashboard() {
         if (isOnline && profile?.role) {
           // Fetch Lessons
           const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(5), orderBy('createdAt', 'desc')));
-          setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Lesson)));
+          setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Lesson)));
 
           // Fetch Assignments
           const assignmentsSnap = await getDocs(query(collection(db, 'assignments'), limit(3), orderBy('deadline', 'asc')));
-          setAssignments(assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Assignment)));
+          setAssignments(assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Assignment)));
 
           // Fetch Submissions
           const subsQuery = profile.role === 'teacher' 
             ? query(collection(db, 'submissions'), limit(5), orderBy('submittedAt', 'desc'))
             : query(collection(db, 'submissions'), where('studentId', '==', profile.uid), limit(5), orderBy('submittedAt', 'desc'));
           const subsSnap = await getDocs(subsQuery);
-          setRecentSubmissions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Submission)));
+          setRecentSubmissions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Submission)));
 
           // Fetch Reminders
           let remindersQuery;
@@ -80,7 +184,7 @@ export default function Dashboard() {
           }
           if (remindersQuery) {
             const remindersSnap = await getDocs(remindersQuery);
-            setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
+            setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Reminder)));
           }
         } else if (!isOnline) {
           const keys = await localforage.keys();
@@ -115,15 +219,38 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [isOnline, profile?.uid]);
 
-  // Real-time posts listener
+  // Real-time posts listener for social feed (Friends + Self)
   useEffect(() => {
-    if (!isOnline) return;
-    const q = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), limit(20));
+    if (!isOnline || !profile?.uid) return;
+    
+    // Get list of accepted friend IDs
+    const acceptedFriendIds = friends
+      .filter(f => f.status === 'accepted')
+      .map(f => f.user1 === profile.uid ? f.user2 : f.user1);
+    
+    // Feed includes self + friends
+    const feedIds = [profile.uid, ...acceptedFriendIds];
+    
+    // Firestore "in" query limited to 30 IDs. If more, we'd need a different strategy,
+    // but for this applet architecture, we'll slice to the first 29 friends + self.
+    const limitedFeedIds = feedIds.slice(0, 30);
+
+    const q = query(
+      collection(db, 'posts'), 
+      where('authorId', 'in', limitedFeedIds),
+      orderBy('createdAt', 'desc'), 
+      limit(20)
+    );
+
     const unsubscribe = onSnapshot(q, (snap) => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as Post)));
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Post)));
+    }, (error) => {
+      console.error("Feed error:", error);
+      // Fallback for query index issues or empty in clause
     });
+    
     return () => unsubscribe();
-  }, [isOnline]);
+  }, [isOnline, profile?.uid, friends]);
 
   if (loading || authLoading) return (
     <div className="flex items-center justify-center h-64">
@@ -216,6 +343,14 @@ export default function Dashboard() {
                       </p>
                     </div>
                   </div>
+                  {post.authorId === profile?.uid && (
+                    <button 
+                      onClick={() => setPostToDelete(post.id)}
+                      className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  )}
                 </div>
                 <p className="text-slate-700 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{post.text}</p>
                 <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
@@ -441,6 +576,20 @@ export default function Dashboard() {
                 <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">{selectedUser.role} • Online</p>
 
                 <div className="w-full space-y-3">
+                  {friends.find(f => f.user1 === selectedUser.uid || f.user2 === selectedUser.uid) ? (
+                    <div className="w-full py-3 bg-emerald-50 text-emerald-600 rounded-xl font-black text-xs uppercase tracking-widest text-center border border-emerald-100 flex items-center justify-center gap-2">
+                      <CheckCircle2 size={16} />
+                      {friends.find(f => f.user1 === selectedUser.uid || f.user2 === selectedUser.uid)?.status === 'accepted' ? 'Friends' : 'Pending Request'}
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => handleAddFriend(selectedUser.uid)}
+                      className="w-full flex items-center justify-center gap-3 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                    >
+                      <Plus size={16} />
+                      Add Friend
+                    </button>
+                  )}
                   <button 
                     onClick={() => {
                       // Navigate to profile
@@ -458,12 +607,56 @@ export default function Dashboard() {
                       navigate(`/chat?userId=${selectedUser.uid}`);
                       setSelectedUser(null);
                     }}
-                    className="w-full flex items-center justify-center gap-3 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                    className="w-full flex items-center justify-center gap-3 py-3 border border-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
                   >
                     <MessageCircle size={16} />
                     Direct Message
                   </button>
                 </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {postToDelete && (
+          <div className="fixed inset-0 flex items-center justify-center z-[110] p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setPostToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 border border-slate-100 overflow-hidden text-center"
+            >
+              <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                <AlertCircle size={32} className="text-red-500" />
+              </div>
+              
+              <h3 className="text-xl font-black text-slate-900 mb-2">Delete Update?</h3>
+              <p className="text-slate-500 text-sm mb-8">This action cannot be undone. Are you sure you want to remove this status update?</p>
+
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setPostToDelete(null)}
+                  className="flex-1 py-3 bg-slate-50 text-slate-600 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-100 transition-all"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleDeletePost}
+                  disabled={deleting}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-100 disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Confirm Delete'}
+                </button>
               </div>
             </motion.div>
           </div>
