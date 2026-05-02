@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Confession, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Heart, MessageSquare, Image as ImageIcon, Trash2, Shield, User, Ghost, Clock, SendHorizontal, X } from 'lucide-react';
+import { Send, Heart, MessageSquare, Image as ImageIcon, Trash2, Shield, User, Ghost, Clock, SendHorizontal, X, Paperclip, Youtube, FileText, Download, MoreVertical, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { uploadFile } from '../services/uploadService';
 
@@ -15,7 +15,7 @@ export default function Confessions() {
   const [isAnonymous, setIsAnonymous] = useState(true);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
-  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
   useEffect(() => {
@@ -34,28 +34,52 @@ export default function Confessions() {
 
     setPublishing(true);
     try {
-      let imageUrl = '';
-      if (imageFile) {
+      let mediaUrl = '';
+      let mediaType: 'image' | 'file' | undefined;
+      let fileName = '';
+      let fileSize = 0;
+
+      if (attachedFile) {
         setUploadProgress(0);
-        const result = await uploadFile(imageFile, 'confessions', (progress) => {
+        const result = await uploadFile(attachedFile, 'confessions', (progress) => {
           setUploadProgress(progress);
         });
-        imageUrl = result.url;
+        mediaUrl = result.url;
+        mediaType = attachedFile.type.startsWith('image/') ? 'image' : 'file';
+        fileName = result.name;
+        fileSize = result.size;
       }
 
-      await addDoc(collection(db, 'confessions'), {
+      const payload: any = {
         authorId: profile.uid,
         authorName: isAnonymous ? 'Secret Shadow' : profile.displayName,
         authorPhoto: isAnonymous ? '' : profile.photoURL,
         text: text,
-        imageUrl: imageUrl,
         isAnonymous: isAnonymous,
         likesCount: 0,
         createdAt: serverTimestamp()
-      });
+      };
+
+      if (mediaUrl) {
+        payload.mediaUrl = mediaUrl;
+        payload.mediaType = mediaType;
+        if (mediaType === 'file') {
+          payload.fileName = fileName;
+          payload.fileSize = fileSize;
+        }
+      }
+
+      // YouTube Integration
+      const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
+      const match = text.match(youtubeRegex);
+      if (match && match[1]) {
+        payload.youtubeId = match[1];
+      }
+
+      await addDoc(collection(db, 'confessions'), payload);
 
       setText('');
-      setImageFile(null);
+      setAttachedFile(null);
       setUploadProgress(null);
     } catch (err) {
       console.error("Publish error:", err);
@@ -109,11 +133,18 @@ export default function Confessions() {
               className="w-full min-h-[120px] p-0 border-none outline-none focus:ring-0 text-slate-800 text-lg font-medium placeholder:text-slate-300 resize-none"
             />
 
-            {imageFile && (
+            {attachedFile && (
               <div className="relative rounded-2xl overflow-hidden group">
-                <img src={URL.createObjectURL(imageFile)} className="w-full h-48 object-cover" alt="Preview" />
+                {attachedFile.type.startsWith('image/') ? (
+                  <img src={URL.createObjectURL(attachedFile)} className="w-full h-48 object-cover" alt="Preview" />
+                ) : (
+                  <div className="bg-slate-50 p-6 flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
+                    <FileText size={48} className="text-slate-300 mb-2" />
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{attachedFile.name}</p>
+                  </div>
+                )}
                 <button 
-                  onClick={() => setImageFile(null)}
+                  onClick={() => setAttachedFile(null)}
                   className="absolute top-2 right-2 p-2 bg-black/50 text-white rounded-full hover:bg-black/70"
                 >
                   <X size={16} />
@@ -137,14 +168,13 @@ export default function Confessions() {
                 onClick={() => {
                   const input = document.createElement('input');
                   input.type = 'file';
-                  input.accept = 'image/*';
-                  input.onchange = (e: any) => setImageFile(e.target.files[0]);
+                  input.onchange = (e: any) => setAttachedFile(e.target.files[0]);
                   input.click();
                 }}
                 className="flex items-center gap-2 text-slate-400 hover:text-indigo-600 transition-colors"
               >
-                <ImageIcon size={18} />
-                <span className="text-[10px] font-black uppercase tracking-widest">Attach Media</span>
+                <Paperclip size={18} />
+                <span className="text-[10px] font-black uppercase tracking-widest">Attach Media / File</span>
               </button>
 
               <button 
@@ -185,6 +215,9 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(confession.text);
 
   useEffect(() => {
     if (!currentProfile || !confession.id) return;
@@ -254,7 +287,7 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
     if (!currentProfile || !newComment.trim()) return;
 
     try {
-      await addDoc(collection(db, 'comments'), {
+      const payload: any = {
         parentId: confession.id,
         parentType: 'confession',
         authorId: currentProfile.uid,
@@ -263,7 +296,16 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
         text: newComment,
         isAnonymous: false,
         createdAt: serverTimestamp()
-      });
+      };
+
+      // YouTube Integration
+      const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
+      const match = newComment.match(youtubeRegex);
+      if (match && match[1]) {
+        payload.youtubeId = match[1];
+      }
+
+      await addDoc(collection(db, 'comments'), payload);
 
       // Notify confession author if it's not self
       if (confession.authorId !== currentProfile.uid) {
@@ -287,6 +329,33 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
     }
   };
 
+  const handleUpdateConfession = async () => {
+    if (!editText.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, 'confessions', confession.id), {
+        text: editText,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditing(false);
+      setShowOptions(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this confession?')) {
+      try {
+        await deleteDoc(doc(db, 'confessions', confession.id));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -304,7 +373,7 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
               <h4 className="text-sm font-black text-slate-900">{confession.authorName}</h4>
               <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                 <Clock size={10} />
-                {confession.createdAt ? format(confession.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
+                {confession.createdAt ? format(confession.createdAt.toDate(), 'MMM d, yyyy • h:mm a') : 'Just now'}
               </p>
             </div>
           </div>
@@ -314,24 +383,122 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
                 Private Confession
               </div>
             )}
-            {(currentProfile?.uid === confession.authorId || currentProfile?.role === 'teacher') && (
-              <button 
-                onClick={async () => {
-                  if (confirm('Delete this confession?')) {
-                    await deleteDoc(doc(db, 'confessions', confession.id));
-                  }
-                }}
-                className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
+            <div className="relative">
+              {(currentProfile?.uid === confession.authorId || currentProfile?.role === 'teacher') && (
+                <button 
+                  onClick={() => setShowOptions(!showOptions)}
+                  className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                >
+                  <MoreVertical size={18} />
+                </button>
+              )}
+
+              <AnimatePresence>
+                {showOptions && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowOptions(false)} />
+                    <motion.div 
+                      initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                      className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 py-2"
+                    >
+                      {currentProfile?.uid === confession.authorId && (
+                        <button 
+                          onClick={() => { setIsEditing(true); setShowOptions(false); }}
+                          className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+                        >
+                          <Pencil size={14} />
+                          Edit Confession
+                        </button>
+                      )}
+                      <button 
+                        onClick={handleConfirmDelete}
+                        className="w-full px-4 py-2 text-left text-xs font-bold text-red-500 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                        Delete Confession
+                      </button>
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
         </div>
 
-        <p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{confession.text}</p>
+        {isEditing ? (
+          <div className="space-y-3">
+            <textarea 
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none min-h-[100px] resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => { setIsEditing(false); setEditText(confession.text); }}
+                className="px-4 py-1.5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdateConfession}
+                disabled={isSubmitting || !editText.trim()}
+                className="px-4 py-1.5 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-700 font-medium leading-relaxed whitespace-pre-wrap">{confession.text}</p>
+        )}
 
-        {confession.imageUrl && (
+        {confession.youtubeId && (
+          <div className="rounded-2xl overflow-hidden border border-slate-100 aspect-video">
+            <iframe 
+              className="w-full h-full"
+              src={`https://www.youtube.com/embed/${confession.youtubeId}`}
+              title="YouTube Video"
+              frameBorder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
+        )}
+
+        {confession.mediaUrl && (confession as any).mediaType === 'image' && (
+          <div className="rounded-2xl overflow-hidden border border-slate-100">
+            <img src={confession.mediaUrl} className="w-full max-h-[400px] object-cover" alt="Attached Media" />
+          </div>
+        )}
+
+        {confession.mediaUrl && (confession as any).mediaType === 'file' && (
+          <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-4 group">
+            <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner">
+              <FileText size={24} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-slate-900 truncate">{(confession as any).fileName}</p>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                {((confession as any).fileSize || 0) > 1024 * 1024 
+                  ? `${(((confession as any).fileSize || 0) / (1024 * 1024)).toFixed(1)} MB` 
+                  : `${(((confession as any).fileSize || 0) / 1024).toFixed(1)} KB`}
+              </p>
+            </div>
+            <a 
+              href={confession.mediaUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="p-3 bg-white border border-slate-200 text-indigo-600 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <Download size={20} />
+            </a>
+          </div>
+        )}
+        
+        {/* Legacy imageUrl support */}
+        {confession.imageUrl && !confession.mediaUrl && (
           <div className="rounded-2xl overflow-hidden border border-slate-100">
             <img src={confession.imageUrl} className="w-full max-h-[400px] object-cover" alt="Attached Media" />
           </div>
@@ -378,6 +545,19 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 font-medium">{comment.text}</p>
+                      
+                      {comment.youtubeId && (
+                        <div className="mt-2 rounded-lg overflow-hidden border border-slate-100 aspect-video">
+                          <iframe 
+                            className="w-full h-full"
+                            src={`https://www.youtube.com/embed/${comment.youtubeId}`}
+                            title="YouTube Video"
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

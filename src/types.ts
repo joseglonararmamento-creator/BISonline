@@ -55,6 +55,11 @@ export interface Post {
   text: string;
   createdAt: any;
   likes?: number;
+  youtubeId?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'file';
+  fileName?: string;
+  fileSize?: number;
 }
 
 export interface Comment {
@@ -67,6 +72,7 @@ export interface Comment {
   text: string;
   isAnonymous?: boolean;
   createdAt: any;
+  youtubeId?: string;
 }
 
 export interface Confession {
@@ -76,6 +82,11 @@ export interface Confession {
   authorPhoto: string;
   text: string;
   imageUrl?: string;
+  mediaUrl?: string;
+  mediaType?: 'image' | 'file';
+  fileName?: string;
+  fileSize?: number;
+  youtubeId?: string;
   isAnonymous: boolean;
   likesCount?: number;
   createdAt: any;
@@ -177,4 +188,11 @@ export interface CalendarEvent {
   description: string;
   date: any;
   type: string;
+}
+
+export interface PostLike {
+  id: string;
+  postId: string;
+  userId: string;
+  createdAt: any;
 }

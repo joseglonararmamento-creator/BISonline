@@ -108,6 +108,11 @@ service cloud.firestore {
       allow create, delete: if isSignedIn() && request.auth.uid == likeId.split('_')[1];
     }
 
+    match /post_likes/{likeId} {
+      allow read: if isSignedIn();
+      allow create, delete: if isSignedIn() && request.auth.uid == likeId.split('_')[1];
+    }
+
     match /posts/{postId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && incoming().authorId == request.auth.uid;

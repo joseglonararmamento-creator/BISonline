@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, limit, orderBy, onSnapshot, addDoc, serverTimestamp, setDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2 } from 'lucide-react';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [interactions, setInteractions] = useState<{ [key: string]: { hearts: number, comments: any[] } }>({});
   const [newPostText, setNewPostText] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [postFile, setPostFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -74,17 +76,52 @@ export default function Dashboard() {
   };
 
   const handlePostUpdate = async () => {
-    if (!profile || !newPostText.trim()) return;
+    if (!profile || (!newPostText.trim() && !postFile)) return;
     setPublishing(true);
     try {
-      const postRef = await addDoc(collection(db, 'posts'), {
+      let mediaUrl = '';
+      let mediaType: 'image' | 'file' | undefined;
+      let fileName = '';
+      let fileSize = 0;
+
+      if (postFile) {
+        setUploadProgress(0);
+        const { uploadFile } = await import('../services/uploadService');
+        const result = await uploadFile(postFile, 'posts', (progress) => {
+          setUploadProgress(progress);
+        });
+        mediaUrl = result.url;
+        mediaType = postFile.type.startsWith('image/') ? 'image' : 'file';
+        fileName = result.name;
+        fileSize = result.size;
+      }
+
+      const payload: any = {
         authorId: profile.uid,
         authorName: profile.displayName,
         photoURL: profile.photoURL,
         text: newPostText,
         createdAt: serverTimestamp(),
         likes: 0
-      });
+      };
+
+      if (mediaUrl) {
+        payload.mediaUrl = mediaUrl;
+        payload.mediaType = mediaType;
+        if (mediaType === 'file') {
+          payload.fileName = fileName;
+          payload.fileSize = fileSize;
+        }
+      }
+
+      // YouTube Integration
+      const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
+      const match = newPostText.match(youtubeRegex);
+      if (match && match[1]) {
+        payload.youtubeId = match[1];
+      }
+
+      const postRef = await addDoc(collection(db, 'posts'), payload);
 
       // Notify accepted friends
       const myFriends = friends.filter(f => f.status === 'accepted');
@@ -105,6 +142,8 @@ export default function Dashboard() {
       }
 
       setNewPostText('');
+      setPostFile(null);
+      setUploadProgress(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -153,6 +192,49 @@ export default function Dashboard() {
   }, [profile?.uid, isOnline]);
 
   useEffect(() => {
+    if (!profile?.uid || !isOnline) return;
+
+    const lessonsQuery = query(collection(db, 'lessons'), orderBy('createdAt', 'desc'), limit(10));
+    const unsubLessons = onSnapshot(lessonsQuery, (snap) => {
+      setLessons(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Lesson)));
+    });
+
+    const assignmentsQuery = query(collection(db, 'assignments'), orderBy('deadline', 'asc'), limit(5));
+    const unsubAssignments = onSnapshot(assignmentsQuery, (snap) => {
+      setAssignments(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Assignment)));
+    });
+
+    const subsQuery = profile.role === 'teacher' 
+      ? query(collection(db, 'submissions'), limit(5), orderBy('submittedAt', 'desc'))
+      : query(collection(db, 'submissions'), where('studentId', '==', profile.uid), limit(5), orderBy('submittedAt', 'desc'));
+    
+    const unsubSubs = onSnapshot(subsQuery, (snap) => {
+      setRecentSubmissions(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Submission)));
+    });
+
+    let remindersQuery;
+    if (profile.role === 'student' && profile.classIds && profile.classIds.length > 0) {
+      remindersQuery = query(collection(db, 'reminders'), where('classId', 'in', profile.classIds), orderBy('createdAt', 'desc'), limit(3));
+    } else if (profile.role === 'teacher') {
+      remindersQuery = query(collection(db, 'reminders'), where('teacherId', '==', profile.uid), orderBy('createdAt', 'desc'), limit(3));
+    }
+
+    let unsubReminders = () => {};
+    if (remindersQuery) {
+      unsubReminders = onSnapshot(remindersQuery, (snap) => {
+        setReminders(snap.docs.map(d => ({ id: d.id, ...d.data() as object } as Reminder)));
+      });
+    }
+
+    return () => {
+      unsubLessons();
+      unsubAssignments();
+      unsubSubs();
+      unsubReminders();
+    };
+  }, [profile?.uid, profile?.role, isOnline]);
+
+  useEffect(() => {
     const fetchData = async () => {
       if (!profile?.role && !authLoading) {
         setLoading(false);
@@ -160,34 +242,7 @@ export default function Dashboard() {
       }
 
       try {
-        if (isOnline && profile?.role) {
-          // Fetch Lessons
-          const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(5), orderBy('createdAt', 'desc')));
-          setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Lesson)));
-
-          // Fetch Assignments
-          const assignmentsSnap = await getDocs(query(collection(db, 'assignments'), limit(3), orderBy('deadline', 'asc')));
-          setAssignments(assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Assignment)));
-
-          // Fetch Submissions
-          const subsQuery = profile.role === 'teacher' 
-            ? query(collection(db, 'submissions'), limit(5), orderBy('submittedAt', 'desc'))
-            : query(collection(db, 'submissions'), where('studentId', '==', profile.uid), limit(5), orderBy('submittedAt', 'desc'));
-          const subsSnap = await getDocs(subsQuery);
-          setRecentSubmissions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Submission)));
-
-          // Fetch Reminders
-          let remindersQuery;
-          if (profile.role === 'student' && profile.classIds && profile.classIds.length > 0) {
-            remindersQuery = query(collection(db, 'reminders'), where('classId', 'in', profile.classIds), orderBy('createdAt', 'desc'), limit(3));
-          } else if (profile.role === 'teacher') {
-            remindersQuery = query(collection(db, 'reminders'), where('teacherId', '==', profile.uid), orderBy('createdAt', 'desc'), limit(3));
-          }
-          if (remindersQuery) {
-            const remindersSnap = await getDocs(remindersQuery);
-            setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() as object } as Reminder)));
-          }
-        } else if (!isOnline) {
+        if (!isOnline) {
           const keys = await localforage.keys();
           const stored: Lesson[] = [];
           for (const key of keys.slice(0, 3)) {
@@ -310,10 +365,44 @@ export default function Dashboard() {
                 placeholder="Share an update, status, or announcement..."
                 className="w-full min-h-[80px] p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 text-sm resize-none transition-all"
               />
-              <div className="flex justify-end">
+              
+              {postFile && (
+                <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+                  <div className="flex items-center gap-3">
+                    <FileText size={18} className="text-indigo-600" />
+                    <span className="text-xs font-bold text-indigo-900 truncate max-w-[200px]">{postFile.name}</span>
+                  </div>
+                  <button onClick={() => setPostFile(null)} className="text-indigo-400 hover:text-indigo-600">
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
+
+              {uploadProgress !== null && (
+                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${uploadProgress}%` }}
+                    className="h-full bg-indigo-600"
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-between items-center">
+                <button 
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.onchange = (e: any) => setPostFile(e.target.files[0]);
+                    input.click();
+                  }}
+                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                >
+                  <Paperclip size={20} />
+                </button>
                 <button 
                   onClick={handlePostUpdate}
-                  disabled={publishing || !newPostText.trim()}
+                  disabled={publishing || (!newPostText.trim() && !postFile)}
                   className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2 hover:bg-indigo-700 transition-all"
                 >
                   {publishing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={14} />}
@@ -327,81 +416,87 @@ export default function Dashboard() {
         {/* Combined Feed (Posts + Lessons) */}
         <div className="space-y-6">
           <AnimatePresence mode="popLayout">
-            {posts.map((post) => (
-              <PostCard 
-                key={post.id} 
-                post={post} 
-                profile={profile} 
-                onDelete={() => setPostToDelete(post.id)} 
-              />
-            ))}
-
-            {lessons.map((lesson) => (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                key={lesson.id} 
-                className="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden"
-              >
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-inner">B</div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1">
-                      Post • {lesson.createdAt ? format(lesson.createdAt.toDate(), 'MMM d') : 'Recently'}
-                    </p>
+            {[...posts, ...lessons.map(l => ({ ...l, isLesson: true }))]
+              .sort((a: any, b: any) => {
+                const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
+                const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+                return dateB - dateA;
+              })
+              .map((item: any) => (
+                item.isLesson ? (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={item.id} 
+                    className="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden"
+                  >
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-inner">B</div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1">
+                          Lesson • {item.createdAt ? format(item.createdAt.toDate(), 'MMM d') : 'Recently'}
+                        </p>
+                      </div>
+                    </div>
+                    <button className="text-slate-400 hover:bg-slate-50 p-2 rounded-full">
+                      <ExternalLink size={16} />
+                    </button>
                   </div>
-                </div>
-                <button className="text-slate-400 hover:bg-slate-50 p-2 rounded-full">
-                  <ExternalLink size={16} />
-                </button>
-              </div>
-              <div className="px-4 pb-3">
-                <h5 className="font-bold text-slate-900 mb-2 text-lg leading-tight">{lesson.title}</h5>
-                <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">{lesson.content}</p>
-              </div>
-              <div className="aspect-[16/9] bg-slate-50 flex items-center justify-center border-y border-slate-50">
-                <BookOpen size={48} className="text-indigo-100" />
-              </div>
-              <div className="px-4 py-2 flex items-center justify-between border-t border-slate-50">
-                <div className="flex items-center -space-x-1">
-                  <motion.div 
-                    whileHover={{ scale: 1.2 }}
-                    className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
-                  >❤️</motion.div>
-                  <motion.div 
-                    whileHover={{ scale: 1.2 }}
-                    className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
-                  >👍</motion.div>
-                   <motion.div 
-                    whileHover={{ scale: 1.2 }}
-                    className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
-                  >🙌</motion.div>
-                  <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                    {interactions[lesson.id]?.hearts || Math.floor(Math.random() * 20)} Reactions
-                  </span>
-                </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                   {interactions[lesson.id]?.comments?.length || Math.floor(Math.random() * 5)} Comments
-                </span>
-              </div>
-              <div className="px-2 pb-2 flex items-center gap-2">
-                <motion.button 
-                  whileTap={{ scale: 1.4 }}
-                  onClick={() => handleStatHeart(lesson.id)}
-                  className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all active:text-red-500"
-                >
-                  <TrendingUp size={16} />
-                  Heart
-                </motion.button>
-                <button className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all">
-                  <MessageCircle size={16} />
-                  Comment
-                </button>
-              </div>
-            </motion.div>
-          ))}
+                  <div className="px-4 pb-3">
+                    <h5 className="font-bold text-slate-900 mb-2 text-lg leading-tight">{item.title}</h5>
+                    <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">{item.content}</p>
+                  </div>
+                  <div className="aspect-[16/9] bg-slate-50 flex items-center justify-center border-y border-slate-50">
+                    <BookOpen size={48} className="text-indigo-100" />
+                  </div>
+                  <div className="px-4 py-2 flex items-center justify-between border-t border-slate-50">
+                    <div className="flex items-center -space-x-1">
+                      <motion.div 
+                        whileHover={{ scale: 1.2 }}
+                        className="w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                      >❤️</motion.div>
+                      <motion.div 
+                        whileHover={{ scale: 1.2 }}
+                        className="w-5 h-5 bg-indigo-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                      >👍</motion.div>
+                       <motion.div 
+                        whileHover={{ scale: 1.2 }}
+                        className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
+                      >🙌</motion.div>
+                      <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                        {interactions[item.id]?.hearts || Math.floor(Math.random() * 20)} Reactions
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
+                       {interactions[item.id]?.comments?.length || Math.floor(Math.random() * 5)} Comments
+                    </span>
+                  </div>
+                  <div className="px-2 pb-2 flex items-center gap-2">
+                    <motion.button 
+                      whileTap={{ scale: 1.4 }}
+                      onClick={() => handleStatHeart(item.id)}
+                      className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all active:text-red-500"
+                    >
+                      <TrendingUp size={16} />
+                      Heart
+                    </motion.button>
+                    <button className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all">
+                      <MessageCircle size={16} />
+                      Comment
+                    </button>
+                  </div>
+                </motion.div>
+                ) : (
+                  <PostCard 
+                    key={item.id} 
+                    post={item} 
+                    profile={profile} 
+                    onDelete={() => setPostToDelete(item.id)} 
+                  />
+                )
+              ))}
 
           {reminders.map((rem) => (
             <div key={rem.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden p-4">
@@ -662,6 +757,24 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
   const [newComment, setNewComment] = useState('');
   const [showComments, setShowComments] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [likes, setLikes] = useState(post.likes || 0);
+  const [hasLiked, setHasLiked] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editText, setEditText] = useState(post.text);
+
+  useEffect(() => {
+    if (!profile || !post.id) return;
+    const checkLike = async () => {
+      const likeDoc = await getDocs(query(
+        collection(db, 'post_likes'), 
+        where('postId', '==', post.id),
+        where('userId', '==', profile.uid)
+      ));
+      setHasLiked(!likeDoc.empty);
+    };
+    checkLike();
+  }, [post.id, profile?.uid]);
 
   useEffect(() => {
     if (!post.id) return;
@@ -677,13 +790,53 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
     return () => unsubscribe();
   }, [post.id]);
 
+  const handleLike = async () => {
+    if (!profile || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      const likeRef = doc(db, 'post_likes', `${post.id}_${profile.uid}`);
+      const postRef = doc(db, 'posts', post.id);
+
+      if (hasLiked) {
+        await deleteDoc(likeRef);
+        await updateDoc(postRef, { likes: Math.max(0, (post.likes || 0) - 1) });
+        setLikes(prev => Math.max(0, prev - 1));
+        setHasLiked(false);
+      } else {
+        await setDoc(likeRef, { userId: profile.uid, postId: post.id, createdAt: serverTimestamp() });
+        await updateDoc(postRef, { likes: (post.likes || 0) + 1 });
+        setLikes(prev => prev + 1);
+        setHasLiked(true);
+
+        if (post.authorId !== profile.uid) {
+          await addDoc(collection(db, 'notifications'), {
+            userId: post.authorId,
+            type: 'post_liked',
+            authorId: profile.uid,
+            authorName: profile.displayName,
+            authorPhoto: profile.photoURL,
+            postId: post.id,
+            text: `${profile.displayName} hearted your post!`,
+            isRead: false,
+            createdAt: serverTimestamp(),
+            link: '/'
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleAddComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile || !newComment.trim() || isSubmitting) return;
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'comments'), {
+      const payload: any = {
         parentId: post.id,
         parentType: 'post',
         authorId: profile.uid,
@@ -692,7 +845,16 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
         text: newComment,
         isAnonymous: false,
         createdAt: serverTimestamp()
-      });
+      };
+
+      // YouTube Integration
+      const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
+      const match = newComment.match(youtubeRegex);
+      if (match && match[1]) {
+        payload.youtubeId = match[1];
+      }
+
+      await addDoc(collection(db, 'comments'), payload);
 
       // Notify post author if it's not self
       if (post.authorId !== profile.uid) {
@@ -719,36 +881,180 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
     }
   };
 
+  const handleUpdatePost = async () => {
+    if (!editText.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+    try {
+      await updateDoc(doc(db, 'posts', post.id), {
+        text: editText,
+        updatedAt: serverTimestamp()
+      });
+      setIsEditing(false);
+      setShowOptions(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (window.confirm('Are you sure you want to delete this status update?')) {
+      try {
+        await deleteDoc(doc(db, 'posts', post.id));
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
   return (
     <motion.div 
+      layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
       className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6"
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <img src={post.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover shadow-sm" alt="" />
+          <Link to={`/profile?id=${post.authorId}`}>
+            <img src={post.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full object-cover shadow-sm border-2 border-indigo-50" alt="" />
+          </Link>
           <div>
-            <h4 className="text-sm font-bold text-slate-900">{post.authorName}</h4>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-              {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Recently'}
+            <Link to={`/profile?id=${post.authorId}`}>
+              <h4 className="text-sm font-bold text-slate-900 hover:text-indigo-600 transition-colors">{post.authorName}</h4>
+            </Link>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1.5">
+              <Clock size={10} />
+              {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, yyyy • h:mm a') : 'Just now'}
             </p>
           </div>
         </div>
-        {post.authorId === profile?.uid && (
-          <button 
-            onClick={onDelete}
-            className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"
-          >
-            <Trash2 size={16} />
-          </button>
+        <div className="relative">
+          {(profile?.uid === post.authorId || profile?.role === 'teacher') && (
+            <button 
+              onClick={() => setShowOptions(!showOptions)}
+              className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-all"
+            >
+              <MoreVertical size={16} />
+            </button>
+          )}
+
+          <AnimatePresence>
+            {showOptions && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowOptions(false)} />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                  className="absolute right-0 top-full mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-100 z-20 py-2"
+                >
+                  {profile?.uid === post.authorId && (
+                    <button 
+                      onClick={() => { setIsEditing(true); setShowOptions(false); }}
+                      className="w-full px-4 py-2 text-left text-xs font-bold text-slate-600 hover:bg-indigo-50 hover:text-indigo-600 flex items-center gap-3 transition-colors"
+                    >
+                      <Pencil size={14} />
+                      Edit Update
+                    </button>
+                  )}
+                  <button 
+                    onClick={handleConfirmDelete}
+                    className="w-full px-4 py-2 text-left text-xs font-bold text-red-500 hover:bg-red-50 flex items-center gap-3 transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Delete Update
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div className="mb-4">
+        {isEditing ? (
+          <div className="space-y-3">
+            <textarea 
+              value={editText}
+              onChange={e => setEditText(e.target.value)}
+              className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/10 outline-none min-h-[100px] resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button 
+                onClick={() => { setIsEditing(false); setEditText(post.text); }}
+                className="px-4 py-1.5 text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 tracking-widest"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleUpdatePost}
+                disabled={isSubmitting || !editText.trim()}
+                className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{post.text}</p>
         )}
       </div>
-      <p className="text-slate-700 text-sm leading-relaxed mb-4 whitespace-pre-wrap">{post.text}</p>
+      
+      {post.youtubeId && (
+        <div className="mb-4 rounded-xl overflow-hidden shadow-sm border border-slate-100 aspect-video">
+          <iframe 
+            className="w-full h-full"
+            src={`https://www.youtube.com/embed/${post.youtubeId}`}
+            title="YouTube Video"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      )}
+
+      {post.mediaUrl && post.mediaType === 'image' && (
+        <div className="mb-4 rounded-xl overflow-hidden border border-slate-100">
+          <img src={post.mediaUrl} className="w-full max-h-[400px] object-cover" alt="Attached Media" />
+        </div>
+      )}
+
+      {post.mediaUrl && post.mediaType === 'file' && (
+        <div className="mb-4 p-4 bg-slate-50 rounded-xl border border-slate-100 flex items-center gap-4 group">
+          <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shadow-inner">
+            <FileText size={24} />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-slate-900 truncate">{post.fileName}</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              {(post.fileSize || 0) > 1024 * 1024 
+                ? `${((post.fileSize || 0) / (1024 * 1024)).toFixed(1)} MB` 
+                : `${((post.fileSize || 0) / 1024).toFixed(1)} KB`}
+            </p>
+          </div>
+          <a 
+            href={post.mediaUrl} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="p-3 bg-white border border-slate-200 text-indigo-600 rounded-xl hover:bg-slate-50 transition-all shadow-sm"
+          >
+            <Download size={20} />
+          </a>
+        </div>
+      )}
+
       <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
-          <button className="flex items-center gap-2 text-slate-500 hover:text-indigo-600 transition-colors">
-            <TrendingUp size={16} />
-            <span className="text-[11px] font-black uppercase tracking-tighter">Heart</span>
+          <button 
+            onClick={handleLike}
+            className={`flex items-center gap-2 transition-colors ${hasLiked ? 'text-red-500' : 'text-slate-500 hover:text-red-500'}`}
+          >
+            <Heart size={16} fill={hasLiked ? "currentColor" : "none"} />
+            <span className="text-[11px] font-black uppercase tracking-tighter">
+              {likes > 0 ? `${likes} Hearts` : 'Heart'}
+            </span>
           </button>
           <button 
             onClick={() => setShowComments(!showComments)}
@@ -781,6 +1087,19 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">{comment.text}</p>
+                    
+                    {comment.youtubeId && (
+                      <div className="mt-2 rounded-lg overflow-hidden border border-slate-100 aspect-video">
+                        <iframe 
+                          className="w-full h-full"
+                          src={`https://www.youtube.com/embed/${comment.youtubeId}`}
+                          title="YouTube Video"
+                          frameBorder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
