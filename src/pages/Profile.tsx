@@ -492,7 +492,7 @@ export default function Profile() {
   } : null;
 
   return (
-    <div className="max-w-xl mx-auto space-y-4 pb-20">
+    <div className="max-w-xl mx-auto space-y-4 pb-20 gpu-accel">
       {/* Profile Header (Facebook Style) */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
         {/* Cover Photo */}

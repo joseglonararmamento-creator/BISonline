@@ -71,11 +71,11 @@ const Sidebar = () => {
   }
 
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col">
+    <aside className="w-64 glass-light border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col z-40 gpu-accel">
       <div className="p-6">
-        <div className="flex items-center gap-2 text-indigo-600 mb-8">
+        <div className="flex items-center gap-2 text-indigo-600 mb-8 neon-glow-indigo">
           <GraduationCap size={32} strokeWidth={2.5} />
-          <span className="text-2xl font-bold tracking-tight">BISonline</span>
+          <span className="text-2xl font-bold tracking-tighter font-display">BISonline</span>
         </div>
         
         <nav className="space-y-1">
@@ -116,7 +116,7 @@ const MobileNav = () => {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-center h-14 z-50 lg:hidden pb-safe">
+    <nav className="fixed bottom-0 left-0 right-0 glass-light border-t border-slate-100 flex justify-around items-center h-14 z-50 lg:hidden pb-safe">
       {links.map((link) => {
         const isActive = location.pathname === link.to;
         return (
@@ -138,6 +138,8 @@ const MobileNav = () => {
 const Navbar = () => {
   const { profile, logout, isOnline } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const isConfessions = location.pathname === '/confessions';
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -296,13 +298,14 @@ const Navbar = () => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-50">
-      <div className="flex items-center gap-4">
-        <Link to="/" className="flex items-center gap-2 text-indigo-600">
-          <GraduationCap size={28} strokeWidth={2.5} />
-          <span className="hidden sm:inline text-xl font-black tracking-tighter">BISonline</span>
-        </Link>
-      </div>
+    <header className={`fixed top-0 left-0 right-0 h-14 glass-light border-b transition-all duration-500 z-50 ${isConfessions ? 'border-pink-500/30 ring-1 ring-pink-500/10' : 'border-indigo-500/30'}`}>
+      <div className="max-w-[1240px] mx-auto h-full flex items-center justify-between px-4">
+        <div className="flex items-center gap-4">
+          <Link to="/" className={`flex items-center gap-2 transition-all duration-500 ${isConfessions ? 'text-pink-500 neon-glow-pink' : 'text-indigo-600 neon-glow-indigo'}`}>
+            <GraduationCap size={28} strokeWidth={2.5} />
+            <span className="hidden sm:inline text-xl font-black tracking-tighter font-display">BISonline</span>
+          </Link>
+        </div>
 
       <div className="flex-1 max-w-md px-4 relative">
         <div className="relative">
@@ -614,6 +617,7 @@ const Navbar = () => {
           </div>
         )}
       </AnimatePresence>
+      </div>
     </header>
   );
 };
@@ -741,12 +745,14 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     </div>
   );
   
+  const isConfessions = location.pathname === '/confessions';
+
   return (
-    <div className="flex bg-[#F0F2F5] h-screen overflow-hidden">
+    <div className={`flex min-h-screen h-screen overflow-hidden transition-colors duration-500 ${isConfessions ? 'confessions-theme' : 'bg-[#F0F2F5]'}`}>
       <Sidebar />
       <div className="flex-1 flex flex-col h-full overflow-hidden pt-14">
         <Navbar />
-        <main className="flex-1 overflow-y-auto w-full max-w-[1200px] mx-auto px-4 pt-4 pb-20 md:pb-8 custom-scrollbar">
+        <main className="flex-1 overflow-y-auto w-full max-w-[1200px] mx-auto px-4 pt-4 pb-20 md:pb-8 custom-scrollbar relative z-10 gpu-accel">
           {children}
         </main>
         <MobileNav />

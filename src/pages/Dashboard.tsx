@@ -10,6 +10,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
 import StudyAssistant from '../components/StudyAssistant';
+import { PostSkeleton } from '../components/Skeleton';
 
 export default function Dashboard() {
   const { profile, isOnline, loading: authLoading } = useAuth();
@@ -32,6 +33,7 @@ export default function Dashboard() {
   const [friends, setFriends] = useState<Friendship[]>([]);
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showMobilePost, setShowMobilePost] = useState(false);
 
   const handleDeletePost = async () => {
     if (!postToDelete) return;
@@ -333,28 +335,106 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row gap-6 relative min-h-screen pb-20">
-      {/* Feed Column */}
-      <div className="flex-1 max-w-[700px] mx-auto w-full space-y-6">
-        {/* Mobile Teacher Tools */}
-        {profile?.role === 'teacher' && (
-          <div className="lg:hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-lg p-4 text-white flex items-center justify-between">
-            <div>
-              <h3 className="text-[10px] font-black uppercase tracking-widest">Professor Panel</h3>
-              <p className="text-xs font-bold text-indigo-100">Manage your virtual classrooms</p>
-            </div>
-            <button 
-              onClick={() => navigate('/classes')}
-              className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95"
-            >
-              <Plus size={14} className="inline mr-1" /> Create Class
-            </button>
-          </div>
-        )}
+    <div className="space-y-6">
+      {/* Mobile Floating Action Button */}
+      <div className="fixed bottom-20 right-6 z-40 lg:hidden">
+        <motion.button
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowMobilePost(true)}
+          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center neon-glow-indigo"
+        >
+          <Plus size={28} />
+        </motion.button>
+      </div>
 
-        {/* What's Latest Box (Standalone Status Box) - Social Media Main Feature */}
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">Academic Updates & Reminders</h3>
+      {/* Mobile Post Overlay */}
+      <AnimatePresence>
+        {showMobilePost && (
+          <motion.div
+            initial={{ opacity: 0, y: '100%' }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: '100%' }}
+            className="fixed inset-0 z-[60] bg-[#0a0a0c] p-6 lg:hidden overflow-y-auto"
+          >
+            <div className="flex justify-between items-center mb-8">
+              <div>
+                <h3 className="text-xl font-black text-white tracking-tighter">New Update</h3>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Share with campus</p>
+              </div>
+              <button onClick={() => setShowMobilePost(false)} className="p-3 bg-white/5 text-white/40 rounded-2xl">
+                <X size={24} />
+              </button>
+            </div>
+            <textarea
+              autoFocus
+              value={newPostText}
+              onChange={e => setNewPostText(e.target.value)}
+              placeholder="What's on your mind?"
+              className="w-full h-48 p-6 bg-white/5 border border-white/5 rounded-[2rem] outline-none focus:ring-4 focus:ring-indigo-500/10 text-white text-lg resize-none placeholder:text-white/10"
+            />
+            
+            <div className="mt-6 space-y-4">
+              {postFile && (
+                <div className="flex items-center justify-between p-4 bg-indigo-500/10 rounded-2xl border border-indigo-500/20">
+                  <div className="flex items-center gap-3">
+                    <FileText size={20} className="text-indigo-400" />
+                    <span className="text-sm font-bold text-indigo-100 truncate max-w-[200px]">{postFile.name}</span>
+                  </div>
+                  <button onClick={() => setPostFile(null)} className="text-indigo-400">
+                    <X size={20} />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-between items-center bg-white/5 p-4 rounded-3xl border border-white/5">
+                 <button 
+                    onClick={() => {
+                      const input = document.createElement('input');
+                      input.type = 'file';
+                      input.onchange = (e: any) => setPostFile(e.target.files[0]);
+                      input.click();
+                    }}
+                    className="flex items-center gap-2 text-white/40"
+                  >
+                    <Paperclip size={20} />
+                    <span className="text-xs font-black uppercase tracking-widest">Attach File</span>
+                  </button>
+                 <button 
+                    onClick={handlePostUpdate}
+                    disabled={publishing || (!newPostText.trim() && !postFile)}
+                    className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-indigo-900/40 disabled:opacity-50"
+                  >
+                    {publishing ? 'Posting...' : 'Share Now'}
+                  </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="flex flex-col lg:flex-row gap-6 relative min-h-screen pb-20 gpu-accel">
+        {/* Feed Column */}
+        <div className="flex-1 max-w-[700px] mx-auto w-full space-y-6 gpu-accel">
+          {/* Mobile Teacher Tools */}
+          {profile?.role === 'teacher' && (
+            <div className="lg:hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-lg p-4 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-[10px] font-black uppercase tracking-widest">Professor Panel</h3>
+                <p className="text-xs font-bold text-indigo-100">Manage your virtual classrooms</p>
+              </div>
+              <button 
+                onClick={() => navigate('/classes')}
+                className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95"
+              >
+                <Plus size={14} className="inline mr-1" /> Create Class
+              </button>
+            </div>
+          )}
+
+          {/* What's Latest Box - Desktop Only */}
+          <div className="hidden lg:block glass-light p-6 rounded-2xl shadow-xl border-gradient-neo flex flex-col gap-4">
+            <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">Academic Feed</h3>
 
           <div className="flex items-start gap-4">
             <img src={profile?.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-indigo-50" alt="Me" />
@@ -416,7 +496,13 @@ export default function Dashboard() {
         {/* Combined Feed (Posts + Lessons) */}
         <div className="space-y-6">
           <AnimatePresence mode="popLayout">
-            {[...posts, ...lessons.map(l => ({ ...l, isLesson: true }))]
+            {loading ? (
+              <>
+                <PostSkeleton />
+                <PostSkeleton />
+                <PostSkeleton />
+              </>
+            ) : [...posts, ...lessons.map(l => ({ ...l, isLesson: true }))]
               .sort((a: any, b: any) => {
                 const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
                 const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
@@ -736,6 +822,7 @@ export default function Dashboard() {
 
       <StudyAssistant />
     </div>
+    </div>
   );
 }
 
@@ -914,7 +1001,8 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6"
+      whileHover={{ y: -4 }}
+      className="glass-light rounded-2xl shadow-xl p-6 transition-all duration-500 border-gradient-neo group gpu-accel"
     >
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
@@ -1047,15 +1135,21 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
       )}
 
       <div className="flex items-center gap-4 pt-4 border-t border-slate-50">
-          <button 
+          <motion.button 
+            whileTap={{ scale: 1.5 }}
             onClick={handleLike}
             className={`flex items-center gap-2 transition-colors ${hasLiked ? 'text-red-500' : 'text-slate-500 hover:text-red-500'}`}
           >
-            <Heart size={16} fill={hasLiked ? "currentColor" : "none"} />
+            <motion.div
+              animate={hasLiked ? { scale: [1, 1.4, 1] } : {}}
+              transition={{ duration: 0.3 }}
+            >
+              <Heart size={16} fill={hasLiked ? "currentColor" : "none"} />
+            </motion.div>
             <span className="text-[11px] font-black uppercase tracking-tighter">
               {likes > 0 ? `${likes} Hearts` : 'Heart'}
             </span>
-          </button>
+          </motion.button>
           <button 
             onClick={() => setShowComments(!showComments)}
             className={`flex items-center gap-2 transition-colors ${showComments ? 'text-indigo-600' : 'text-slate-500 hover:text-indigo-600'}`}
