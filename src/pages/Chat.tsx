@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, limit, getDocs, updateDoc, doc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp, where, limit, getDocs, updateDoc, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { Message, UserProfile, Class } from '../types';
@@ -283,6 +283,10 @@ export default function Chat() {
     }
   };
 
+  const [lastMessageId, setLastMessageId] = useState<string | null>(null);
+  const [showUndo, setShowUndo] = useState(false);
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const handleSendMessage = async (e?: React.FormEvent, media?: { type: 'image' | 'audio' | 'file', url: string, name?: string, size?: number }) => {
     e?.preventDefault();
     if (!profile) return;
@@ -347,9 +351,27 @@ export default function Chat() {
         }
       }
 
-      await addDoc(collection(db, 'messages'), payload);
+      const docRef = await addDoc(collection(db, 'messages'), payload);
       setNewMessage('');
       setAudioBlob(null);
+
+      // Undo logic
+      setLastMessageId(docRef.id);
+      setShowUndo(true);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = setTimeout(() => setShowUndo(false), 5000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!lastMessageId) return;
+    try {
+      await deleteDoc(doc(db, 'messages', lastMessageId));
+      setLastMessageId(null);
+      setShowUndo(false);
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
     } catch (err) {
       console.error(err);
     }
@@ -413,15 +435,16 @@ export default function Chat() {
 
     setUploadingProgress(0);
     try {
-      const result = await uploadFile(file, `chats/${chatType === 'class' ? selectedClassId : 'direct'}`, (progress) => {
+      const { uploadWithProgress } = await import('../services/storageService');
+      const url = await uploadWithProgress(file, `chats/${chatType === 'class' ? selectedClassId : 'direct'}`, (progress) => {
         setUploadingProgress(progress);
       });
       
       await handleSendMessage(undefined, { 
         type: 'file', 
-        url: result.url,
-        name: result.name,
-        size: result.size
+        url: url,
+        name: file.name,
+        size: file.size
       });
     } catch (err) {
       console.error("File upload failed:", err);
@@ -438,13 +461,14 @@ export default function Chat() {
 
     setUploadingProgress(0);
     try {
-      const result = await uploadFile(file, `chats/images`, (progress) => {
+      const { uploadWithProgress } = await import('../services/storageService');
+      const url = await uploadWithProgress(file, `chats/images`, (progress) => {
         setUploadingProgress(progress);
       });
       
       await handleSendMessage(undefined, { 
         type: 'image', 
-        url: result.url
+        url: url
       });
     } catch (err) {
       console.error("Image upload failed:", err);
@@ -830,7 +854,32 @@ export default function Chat() {
               <div ref={scrollRef} />
             </div>
 
-            <div className="p-3 md:p-6 border-t border-slate-100 bg-white shadow-lg">
+            <div className="p-3 md:p-6 border-t border-slate-100 bg-white shadow-lg relative">
+              <AnimatePresence>
+                {showUndo && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="absolute bottom-full left-6 mb-4 bg-slate-900 text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-4 z-50 ring-2 ring-white/10"
+                  >
+                    <div className="flex flex-col">
+                      <span className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-500 mb-0.5">Notification</span>
+                      <span className="text-[10px] font-bold tracking-tight">Message Sent Successfully</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10 mx-1" />
+                    <button 
+                      onClick={handleUndo}
+                      className="text-[10px] font-black uppercase tracking-widest text-indigo-400 hover:text-indigo-300 transition-colors flex items-center gap-2 group"
+                    >
+                      Undo Send
+                      <span className="w-5 h-5 rounded-lg bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500/20 transition-all">
+                        <X size={10} className="rotate-0 group-hover:rotate-90 transition-transform" />
+                      </span>
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               {uploadingProgress !== null && (
                 <div className="mb-3">
                   <div className="flex justify-between items-center mb-1">

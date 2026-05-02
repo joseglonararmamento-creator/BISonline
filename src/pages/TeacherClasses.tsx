@@ -30,27 +30,45 @@ export default function TeacherClasses() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
 
-  useEffect(() => {
-    if (!profile || profile.role !== 'teacher') return;
+  const [activeTab, setActiveTab] = useState<'classes' | 'requests'>('classes');
+  const [joinRequests, setJoinRequests] = useState<any[]>([]);
 
-    const q = query(
-      collection(db, 'classes'),
-      where('teacherId', '==', profile.uid)
-    );
+  useEffect(() => {
+    if (!profile) return;
+
+    // Teachers see their classes, students see all classes to join
+    const q = profile.role === 'teacher' 
+      ? query(collection(db, 'classes'), where('teacherId', '==', profile.uid))
+      : query(collection(db, 'classes'));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setClasses(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Class)));
     });
 
-    const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
-    const unsubscribeStudents = onSnapshot(studentsQuery, (snapshot) => {
-      setAllStudents(snapshot.docs.map(d => d.data() as UserProfile));
-    });
+    if (profile.role === 'teacher') {
+      const requestsQ = query(
+        collection(db, 'notifications'),
+        where('userId', '==', profile.uid),
+        where('type', '==', 'class_join_request'),
+        where('isRead', '==', false)
+      );
+      const unsubscribeRequests = onSnapshot(requestsQ, (snap) => {
+        setJoinRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      });
 
-    return () => {
-      unsubscribe();
-      unsubscribeStudents();
-    };
+      const studentsQuery = query(collection(db, 'users'), where('role', '==', 'student'));
+      const unsubscribeStudents = onSnapshot(studentsQuery, (snapshot) => {
+        setAllStudents(snapshot.docs.map(d => d.data() as UserProfile));
+      });
+
+      return () => {
+        unsubscribe();
+        unsubscribeRequests();
+        unsubscribeStudents();
+      };
+    }
+
+    return () => unsubscribe();
   }, [profile]);
 
   const handleCreateClass = async (e: React.FormEvent) => {
@@ -101,11 +119,95 @@ export default function TeacherClasses() {
     }
   };
 
-  const copyInviteCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    setCopiedId(code);
-    setTimeout(() => setCopiedId(null), 2000);
+  const handleJoinRequest = async (cls: Class) => {
+    if (!profile) return;
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        userId: cls.teacherId,
+        type: 'class_join_request',
+        authorId: profile.uid,
+        authorName: profile.displayName,
+        authorPhoto: profile.photoURL,
+        classId: cls.id,
+        className: cls.name,
+        text: `${profile.displayName} wants to join your class: ${cls.name}`,
+        isRead: false,
+        createdAt: serverTimestamp()
+      });
+      alert('Join request sent to teacher!');
+    } catch (err) {
+      console.error(err);
+    }
   };
+
+  const handleHandleRequest = async (notif: any, accept: boolean) => {
+    try {
+      if (accept) {
+        await updateDoc(doc(db, 'users', notif.authorId), {
+          classIds: arrayUnion(notif.classId)
+        });
+        // Notify student
+        await addDoc(collection(db, 'notifications'), {
+          userId: notif.authorId,
+          type: 'class_accepted',
+          authorId: profile?.uid,
+          authorName: profile?.displayName,
+          authorPhoto: profile?.photoURL,
+          text: `Your request to join ${notif.className} has been accepted!`,
+          isRead: false,
+          createdAt: serverTimestamp(),
+          link: '/classes'
+        });
+      }
+      await updateDoc(doc(db, 'notifications', notif.id), { isRead: true });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  if (profile?.role === 'student') {
+    return (
+      <div className="space-y-6 pb-12">
+        <div>
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Browse Classes</h2>
+          <p className="text-slate-500 font-medium">Find learning spaces and request to join.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {classes.map(cls => {
+            const isMember = profile.classIds?.includes(cls.id);
+            return (
+              <motion.div
+                key={cls.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm flex flex-col hover:shadow-md transition-all group"
+              >
+                <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mb-4">
+                  <LayoutGrid size={24} />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 mb-1">{cls.name}</h3>
+                <p className="text-sm text-slate-500 mb-6 flex-1 line-clamp-2">{cls.description}</p>
+                
+                {isMember ? (
+                  <div className="w-full py-3 bg-emerald-50 text-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-[0.15em] flex items-center justify-center gap-2 border border-emerald-100">
+                    <CheckCircle2 size={16} /> Member
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => handleJoinRequest(cls)}
+                    className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-[0.15em] shadow-xl shadow-indigo-100 hover:bg-indigo-700 transition-all active:scale-95"
+                  >
+                    Request to Join
+                  </button>
+                )}
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   const getStudentCount = (classId: string) => {
     return allStudents.filter(s => s.classIds?.includes(classId)).length;
@@ -114,9 +216,24 @@ export default function TeacherClasses() {
   return (
     <div className="space-y-6 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Class Management</h2>
-          <p className="text-slate-500">Create and oversee your learning environments.</p>
+        <div className="flex gap-4">
+          <button 
+            onClick={() => setActiveTab('classes')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'classes' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            My Classes
+          </button>
+          <button 
+            onClick={() => setActiveTab('requests')}
+            className={`px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'requests' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            Join Requests
+            {joinRequests.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] rounded-full flex items-center justify-center border-2 border-white">
+                {joinRequests.length}
+              </span>
+            )}
+          </button>
         </div>
         <button 
           onClick={() => setShowAddModal(true)}
@@ -127,80 +244,110 @@ export default function TeacherClasses() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AnimatePresence>
-          {classes.map((cls) => {
-            const count = getStudentCount(cls.id);
-            return (
-              <motion.div
-                key={cls.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-shadow group flex flex-col"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
-                    <LayoutGrid size={24} />
+      {activeTab === 'classes' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence>
+            {classes.map((cls) => {
+              const count = getStudentCount(cls.id);
+              return (
+                <motion.div
+                  key={cls.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9 }}
+                  className="bg-white rounded-3xl border border-slate-100 p-6 shadow-sm hover:shadow-md transition-shadow group flex flex-col"
+                >
+                  <div className="flex justify-between items-start mb-4">
+                    <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center">
+                      <LayoutGrid size={24} />
+                    </div>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => { setSelectedClass(cls); setShowMembersModal(true); }}
+                        className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                        title="Manage Students"
+                      >
+                        <Users size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteClass(cls.id)}
+                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex gap-1">
-                    <button 
-                      onClick={() => { setSelectedClass(cls); setShowMembersModal(true); }}
-                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                      title="Manage Students"
-                    >
-                      <Users size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteClass(cls.id)}
-                      className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+
+                  <h3 className="text-xl font-bold text-slate-900 mb-1">{cls.name}</h3>
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-6 flex-1">{cls.description || 'No description provided.'}</p>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-400 px-1 pt-2 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <Users size={14} />
+                        <span>{count} Students</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <BookOpen size={14} />
+                        <span>0 Lessons</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+
+          {classes.length === 0 && (
+            <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-[40px] border-2 border-dashed border-slate-200">
+              <LayoutGrid size={48} className="mb-4 opacity-20" />
+              <p className="font-bold">No classes created yet</p>
+              <p className="text-sm">Click the button above to start your first class</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="max-w-2xl space-y-4">
+          <AnimatePresence>
+            {joinRequests.map((req) => (
+              <motion.div
+                key={req.id}
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center justify-between"
+              >
+                <div className="flex items-center gap-4">
+                  <img src={req.authorPhoto || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-2xl object-cover border border-slate-100 shadow-sm" alt="" />
+                  <div>
+                    <h4 className="font-black text-slate-900">{req.authorName}</h4>
+                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">Wants to join {req.className}</p>
                   </div>
                 </div>
-
-                <h3 className="text-xl font-bold text-slate-900 mb-1">{cls.name}</h3>
-                <p className="text-sm text-slate-500 line-clamp-2 mb-6 flex-1">{cls.description || 'No description provided.'}</p>
-
-                <div className="space-y-3">
-                  <div className="p-3 bg-slate-50 rounded-xl flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Invite Code</p>
-                      <p className="font-mono font-bold text-indigo-600 tracking-wider">{cls.inviteCode}</p>
-                    </div>
-                    <button 
-                      onClick={() => copyInviteCode(cls.inviteCode)}
-                      className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-all"
-                    >
-                      {copiedId === cls.inviteCode ? <CheckCircle2 size={18} /> : <Copy size={18} />}
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-400 px-1 pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <Users size={14} />
-                      <span>{count} Students</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <BookOpen size={14} />
-                      <span>0 Lessons</span>
-                    </div>
-                  </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleHandleRequest(req, false)}
+                    className="px-4 py-2 bg-slate-50 text-slate-400 font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-slate-100"
+                  >
+                    Decline
+                  </button>
+                  <button 
+                    onClick={() => handleHandleRequest(req, true)}
+                    className="px-6 py-2 bg-indigo-600 text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-100"
+                  >
+                    Accept
+                  </button>
                 </div>
               </motion.div>
-            );
-          })}
-        </AnimatePresence>
-
-        {classes.length === 0 && (
-          <div className="col-span-full py-20 flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-[40px] border-2 border-dashed border-slate-200">
-            <LayoutGrid size={48} className="mb-4 opacity-20" />
-            <p className="font-bold">No classes created yet</p>
-            <p className="text-sm">Click the button above to start your first class</p>
-          </div>
-        )}
-      </div>
+            ))}
+          </AnimatePresence>
+          {joinRequests.length === 0 && (
+            <div className="py-20 text-center text-slate-400 italic text-sm">
+              No pending join requests.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Class Create Modal */}
       <AnimatePresence>

@@ -43,13 +43,13 @@ export default function Confessions() {
 
       if (attachedFile) {
         setUploadProgress(0);
-        const result = await uploadFile(attachedFile, 'confessions', (progress) => {
+        const { uploadWithProgress } = await import('../services/storageService');
+        mediaUrl = await uploadWithProgress(attachedFile, 'confessions', (progress) => {
           setUploadProgress(progress);
         });
-        mediaUrl = result.url;
         mediaType = attachedFile.type.startsWith('image/') ? 'image' : 'file';
-        fileName = result.name;
-        fileSize = result.size;
+        fileName = attachedFile.name;
+        fileSize = attachedFile.size;
       }
 
       const payload: any = {
@@ -213,12 +213,18 @@ export default function Confessions() {
             )}
 
             {uploadProgress !== null && (
-              <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                <motion.div 
-                  className="h-full bg-pink-500"
-                  initial={{ width: 0 }}
-                  animate={{ width: `${uploadProgress}%` }}
-                />
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[10px] font-black text-pink-400 uppercase tracking-widest">
+                  <span>Secret Encrypting...</span>
+                  <span>{uploadProgress}%</span>
+                </div>
+                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="h-full bg-pink-500 shadow-[0_0_10px_rgba(236,72,153,0.5)]"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
               </div>
             )}
 

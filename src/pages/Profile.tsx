@@ -132,10 +132,9 @@ export default function Profile() {
         link: `/profile?userId=${myProfile.uid}`
       });
 
-      alert('Connection request sent!');
+      // No alert, rely on button state
     } catch (err) {
       console.error(err);
-    } finally {
       setRequesting(false);
     }
   };
@@ -186,10 +185,6 @@ export default function Profile() {
       alert('You must be logged in to upload a profile picture.');
       return;
     }
-    if (!storage) {
-      alert('Cloud Storage is not enabled for this project. Please check your Firebase console.');
-      return;
-    }
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
@@ -198,58 +193,23 @@ export default function Profile() {
     }
 
     setUploading(true);
-    setUploadProgress(10);
     try {
-      // Image Compression Options
-      const options = {
-        maxSizeMB: 0.1, // Faster compression, smaller file
-        maxWidthOrHeight: 256, // Sufficient for thumbnails
-        useWebWorker: true,
-        initialQuality: 0.6, // Favor speed
-      };
+      const { uploadWithProgress } = await import('../services/storageService');
+      const downloadURL = await uploadWithProgress(file, `profiles/${profile.uid}`, (progress) => {
+        setUploadProgress(progress);
+      });
 
-      console.log(`Original file size: ${file.size / 1024 / 1024} MB`);
-      setUploadProgress(30);
-      const compressedFile = await imageCompression(file, options);
-      console.log(`Compressed file size: ${compressedFile.size / 1024 / 1024} MB`);
-      
-      setUploadProgress(50);
-      const storageRef = ref(storage, `profiles/${profile.uid}/${Date.now()}_${compressedFile.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, compressedFile);
-
-      uploadTask.on('state_changed', 
-        (snapshot) => {
-          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-          setUploadProgress( progress);
-        }, 
-        (error) => {
-          console.error("Upload task failed:", error);
-          setUploading(false);
-          setUploadProgress(0);
-          alert(`Upload failed: ${error.message}`);
-        }, 
-        async () => {
-          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-          await updateDoc(doc(db, 'users', profile.uid), {
-            photoURL: downloadURL
-          });
-          setNewPhotoURL(downloadURL);
-          setUploading(false);
-          setUploadProgress(0);
-          alert('Profile picture uploaded successfully!');
-        }
-      );
+      await updateDoc(doc(db, 'users', profile.uid), {
+        photoURL: downloadURL
+      });
+      setNewPhotoURL(downloadURL);
+      alert('Profile picture updated successfully!');
     } catch (err: any) {
       console.error('Upload failed:', err);
+      alert(`Failed to upload image: ${err.message || 'Unknown error'}`);
+    } finally {
       setUploading(false);
       setUploadProgress(0);
-      if (err.code === 'storage/unauthorized') {
-        alert('Upload failed: You do not have permission to upload files. Please check Storage Rules.');
-      } else if (err.code === 'storage/retry-limit-exceeded') {
-        alert('Upload failed: Operation timed out. Check your internet connection.');
-      } else {
-        alert(`Failed to upload image: ${err.message || 'Unknown error'}`);
-      }
     }
   };
 
@@ -568,15 +528,15 @@ export default function Profile() {
                   {friendship ? (
                     <div className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-2 ${friendship.status === 'accepted' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>
                       {friendship.status === 'accepted' ? <CheckCircle2 size={14} /> : <Clock size={14} />}
-                      {friendship.status === 'accepted' ? 'Friends' : 'Pending Request'}
+                      {friendship.status === 'accepted' ? 'Friends' : (requesting || friendship.status === 'pending' ? 'Request Sent' : 'Pending Request')}
                     </div>
                   ) : (
                     <button 
                       onClick={handleAddFriend}
                       disabled={requesting}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all"
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold text-xs shadow-md shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 disabled:bg-slate-400 disabled:shadow-none active:scale-95 transition-all"
                     >
-                      <UserPlus size={14} /> {requesting ? 'Sending...' : 'Add Friend'}
+                      <UserPlus size={14} /> {requesting ? 'Request Sent' : 'Add Friend'}
                     </button>
                   )}
                   <button 

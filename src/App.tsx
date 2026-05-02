@@ -145,7 +145,7 @@ const Navbar = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
+  const [searchResults, setSearchResults] = useState<{ type: 'user' | 'class', id: string, name: string, sub: string, photo?: string }[]>([]);
   const [searching, setSearching] = useState(false);
   const [teacherClasses, setTeacherClasses] = useState<Class[]>([]);
   const [showClassSelector, setShowClassSelector] = useState<{ userId: string, userName: string } | null>(null);
@@ -167,15 +167,51 @@ const Navbar = () => {
       }
       setSearching(true);
       try {
-        const q = query(
+        const results: any[] = [];
+        
+        // Search Users
+        const userQ = query(
           collection(db, 'users'),
           orderBy('displayName'),
           where('displayName', '>=', searchQuery),
           where('displayName', '<=', searchQuery + '\uf8ff'),
           limit(5)
         );
-        const snap = await getDocs(q);
-        setSearchResults(snap.docs.map(d => d.data() as UserProfile).filter(u => u.uid !== profile?.uid));
+        const userSnap = await getDocs(userQ);
+        userSnap.docs.forEach(d => {
+          const data = d.data();
+          if (data.uid !== profile?.uid) {
+            results.push({
+              type: 'user',
+              id: data.uid,
+              name: data.displayName,
+              sub: data.role,
+              photo: data.photoURL
+            });
+          }
+        });
+
+        // Search Classes
+        const classQ = query(
+          collection(db, 'classes'),
+          orderBy('name'),
+          where('name', '>=', searchQuery),
+          where('name', '<=', searchQuery + '\uf8ff'),
+          limit(5)
+        );
+        const classSnap = await getDocs(classQ);
+        classSnap.docs.forEach(d => {
+          const data = d.data();
+          results.push({
+            type: 'class',
+            id: d.id,
+            name: data.name,
+            sub: `Instructor: ${data.teacherName || 'Unknown'}`,
+            photo: undefined
+          });
+        });
+
+        setSearchResults(results);
       } catch (err) {
         console.error(err);
       } finally {
@@ -337,24 +373,34 @@ const Navbar = () => {
                 ) : searchResults.length === 0 ? (
                   <div className="p-8 text-center text-slate-400 text-xs italic">No members found.</div>
                 ) : (
-                  searchResults.map(user => (
-                    <div key={user.uid} className="p-3 border-b border-slate-50 hover:bg-slate-50 flex items-center justify-between group">
+                  searchResults.map(result => (
+                    <div key={result.id} className="p-3 border-b border-slate-50 hover:bg-slate-50 flex items-center justify-between group">
                       <div 
                         className="flex items-center gap-3 cursor-pointer flex-1"
                         onClick={() => {
-                          navigate(`/profile?userId=${user.uid}`);
+                          if (result.type === 'user') {
+                            navigate(`/profile?userId=${result.id}`);
+                          } else {
+                            navigate(`/classes?classId=${result.id}`);
+                          }
                           setSearchQuery('');
                         }}
                       >
-                        <img src={user.photoURL || 'https://via.placeholder.com/32'} className="w-8 h-8 rounded-full border border-slate-200" alt="" />
+                        {result.photo ? (
+                          <img src={result.photo} className="w-8 h-8 rounded-full border border-slate-200" alt="" />
+                        ) : (
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${result.type === 'class' ? 'bg-indigo-100 text-indigo-600' : 'bg-slate-100 text-slate-400'}`}>
+                            {result.type === 'class' ? <LayoutGrid size={16} /> : <User size={16} />}
+                          </div>
+                        )}
                         <div>
-                          <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{user.displayName}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{user.role}</p>
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-indigo-600 transition-colors">{result.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{result.sub}</p>
                         </div>
                       </div>
-                      {profile?.role === 'teacher' && user.role === 'student' && (
+                      {profile?.role === 'teacher' && result.type === 'user' && (
                         <button 
-                          onClick={() => setShowClassSelector({ userId: user.uid, userName: user.displayName || 'Student' })}
+                          onClick={() => setShowClassSelector({ userId: result.id, userName: result.name || 'Student' })}
                           className="px-3 py-1 bg-indigo-50 text-indigo-600 rounded-lg font-black text-[9px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
                         >
                           Add to Class

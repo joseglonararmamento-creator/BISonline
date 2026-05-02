@@ -42,48 +42,48 @@
   }
 }
 
-@layer components {
-  .gpu-accel {
-    transform: translateZ(0);
-    will-change: transform, opacity;
-    backface-visibility: hidden;
-  }
+@utility gpu-accel {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
 
-  .glass-light {
-    @apply bg-white/80 backdrop-blur-lg border border-white/30 gpu-accel;
-  }
-  
-  .glass-dark {
-    @apply bg-slate-900/60 backdrop-blur-xl border border-white/10 gpu-accel;
-  }
+@utility glass-light {
+  @apply bg-white/80 backdrop-blur-lg border border-white/30;
+  @apply gpu-accel;
+}
 
-  .neon-glow-indigo {
-    filter: drop-shadow(0 0 10px rgba(79, 70, 229, 0.4));
-  }
+@utility glass-dark {
+  @apply bg-slate-900/60 backdrop-blur-xl border border-white/10;
+  @apply gpu-accel;
+}
 
-  .neon-glow-pink {
-    filter: drop-shadow(0 0 15px rgba(236, 72, 153, 0.6));
-  }
+@utility neon-glow-indigo {
+  filter: drop-shadow(0 0 10px rgba(79, 70, 229, 0.4));
+}
 
-  .border-gradient-neo {
-    position: relative;
-    background: linear-gradient(white, white) padding-box,
-                linear-gradient(to right, var(--color-neo-indigo), var(--color-neo-purple)) border-box;
-    border: 1px solid transparent;
-    @apply gpu-accel;
-  }
+@utility neon-glow-pink {
+  filter: drop-shadow(0 0 15px rgba(236, 72, 153, 0.6));
+}
 
-  .border-gradient-neo-dark {
-    position: relative;
-    background: linear-gradient(#0f172a, #0f172a) padding-box,
-                linear-gradient(to right, var(--color-neo-pink), var(--color-neo-purple)) border-box;
-    border: 1px solid transparent;
-    @apply gpu-accel;
-  }
+@utility border-gradient-neo {
+  position: relative;
+  background: linear-gradient(white, white) padding-box,
+              linear-gradient(to right, var(--color-neo-indigo), var(--color-neo-purple)) border-box;
+  border: 1px solid transparent;
+  @apply gpu-accel;
+}
 
-  .confessions-theme {
-    background: radial-gradient(circle at top right, #1e1b4b, #020617);
-  }
+@utility border-gradient-neo-dark {
+  position: relative;
+  background: linear-gradient(#0f172a, #0f172a) padding-box,
+              linear-gradient(to right, var(--color-neo-pink), var(--color-neo-purple)) border-box;
+  border: 1px solid transparent;
+  @apply gpu-accel;
+}
+
+@utility confessions-theme {
+  background: radial-gradient(circle at top right, #1e1b4b, #020617);
 }
 
 .custom-scrollbar::-webkit-scrollbar {

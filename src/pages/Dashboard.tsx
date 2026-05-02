@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil } from 'lucide-react';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import ShareModal from '../components/ShareModal';
@@ -79,6 +79,10 @@ export default function Dashboard() {
 
   const handlePostUpdate = async () => {
     if (!profile || (!newPostText.trim() && !postFile)) return;
+    if (profile.role !== 'teacher') {
+      alert("Only teachers can post status updates.");
+      return;
+    }
     setPublishing(true);
     try {
       let mediaUrl = '';
@@ -88,14 +92,13 @@ export default function Dashboard() {
 
       if (postFile) {
         setUploadProgress(0);
-        const { uploadFile } = await import('../services/uploadService');
-        const result = await uploadFile(postFile, 'posts', (progress) => {
+        const { uploadWithProgress } = await import('../services/storageService');
+        mediaUrl = await uploadWithProgress(postFile, 'posts', (progress) => {
           setUploadProgress(progress);
         });
-        mediaUrl = result.url;
         mediaType = postFile.type.startsWith('image/') ? 'image' : 'file';
-        fileName = result.name;
-        fileSize = result.size;
+        fileName = postFile.name;
+        fileSize = postFile.size;
       }
 
       const payload: any = {
@@ -337,16 +340,18 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Mobile Floating Action Button */}
-      <div className="fixed bottom-20 right-6 z-40 lg:hidden">
-        <motion.button
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setShowMobilePost(true)}
-          className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center neon-glow-indigo"
-        >
-          <Plus size={28} />
-        </motion.button>
-      </div>
+      {profile?.role === 'teacher' && (
+        <div className="fixed bottom-20 right-6 z-40 lg:hidden">
+          <motion.button
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setShowMobilePost(true)}
+            className="w-14 h-14 bg-indigo-600 text-white rounded-full shadow-2xl flex items-center justify-center neon-glow-indigo"
+          >
+            <Plus size={28} />
+          </motion.button>
+        </div>
+      )}
 
       {/* Mobile Post Overlay */}
       <AnimatePresence>
@@ -432,17 +437,18 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* What's Latest Box - Desktop Only */}
-          <div className="hidden lg:block glass-light p-6 rounded-2xl shadow-xl border-gradient-neo flex flex-col gap-4">
-            <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">Academic Feed</h3>
+      {/* What's Latest Box - Desktop Only */}
+      {profile?.role === 'teacher' && (
+        <div className="hidden lg:block glass-light p-6 rounded-2xl shadow-xl border-gradient-neo flex flex-col gap-4">
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">Teacher's Announcement</h3>
 
           <div className="flex items-start gap-4">
-            <img src={profile?.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-indigo-50" alt="Me" />
+            <img src={profile?.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-indigo-50 shadow-sm" alt="Me" />
             <div className="flex-1 space-y-3">
               <textarea 
                 value={newPostText}
                 onChange={e => setNewPostText(e.target.value)}
-                placeholder="Share an update, status, or announcement..."
+                placeholder="Post a status update or announcement for students..."
                 className="w-full min-h-[80px] p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-indigo-500/10 text-slate-700 text-sm resize-none transition-all"
               />
               
@@ -459,12 +465,18 @@ export default function Dashboard() {
               )}
 
               {uploadProgress !== null && (
-                <div className="h-1 w-full bg-slate-100 rounded-full overflow-hidden">
-                  <motion.div 
-                    initial={{ width: 0 }}
-                    animate={{ width: `${uploadProgress}%` }}
-                    className="h-full bg-indigo-600"
-                  />
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-black text-indigo-600 uppercase tracking-widest">
+                    <span>Uploading Assets</span>
+                    <span>{uploadProgress}%</span>
+                  </div>
+                  <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadProgress}%` }}
+                      className="h-full bg-indigo-600 shadow-[0_0_10px_rgba(79,70,229,0.5)]"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -476,22 +488,23 @@ export default function Dashboard() {
                     input.onchange = (e: any) => setPostFile(e.target.files[0]);
                     input.click();
                   }}
-                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                  className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-all shadow-sm border border-transparent hover:border-slate-100"
                 >
                   <Paperclip size={20} />
                 </button>
                 <button 
                   onClick={handlePostUpdate}
                   disabled={publishing || (!newPostText.trim() && !postFile)}
-                  className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 disabled:opacity-50 flex items-center gap-2 hover:bg-indigo-700 transition-all"
+                  className="px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl shadow-indigo-100 disabled:opacity-50 flex items-center gap-2 hover:bg-indigo-700 transition-all active:scale-95"
                 >
-                  {publishing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={14} />}
-                  Post Update
+                  {publishing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                  {publishing ? 'Publishing...' : 'Share Update'}
                 </button>
               </div>
             </div>
           </div>
         </div>
+      )}
 
         {/* Combined Feed (Posts + Lessons) */}
         <div className="space-y-6">
