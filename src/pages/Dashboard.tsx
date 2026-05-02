@@ -23,7 +23,6 @@ export default function Dashboard() {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [dairies, setDairies] = useState<any[]>([]);
   const [interactions, setInteractions] = useState<{ [key: string]: { hearts: number, comments: any[] } }>({});
   const [newPostText, setNewPostText] = useState('');
   const [publishing, setPublishing] = useState(false);
@@ -50,95 +49,40 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Guard: Do not attempt to load if role is missing
       if (!profile?.role && !authLoading) {
         setLoading(false);
         return;
       }
 
       try {
-        if (isOnline) {
-          // Lessons
+        if (isOnline && profile?.role) {
+          // Fetch Lessons
           const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(5), orderBy('createdAt', 'desc')));
           setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Lesson)));
 
-          // Posts
-          const postsSnap = await getDocs(query(collection(db, 'posts'), limit(10), orderBy('createdAt', 'desc')));
-          setPosts(postsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Post)));
-
-          // Dairies (Expired after 24 hours) - ONLY photo/video circles
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          const dairiesQuery = query(
-            collection(db, 'dairies'), 
-            where('createdAt', '>', oneDayAgo),
-            orderBy('createdAt', 'desc')
-          );
-          const dairiesSnap = await getDocs(dairiesQuery);
-          setDairies(dairiesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-  const handleStatHeart = async (lessonId: string) => {
-    // Implement heart animation/logic
-    console.log("Hearted lesson", lessonId);
-  };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      // Guard: Do not attempt to load if role is missing
-      if (!profile?.role) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        if (isOnline) {
-          // Lessons
-          const lessonsSnap = await getDocs(query(collection(db, 'lessons'), limit(5), orderBy('createdAt', 'desc')));
-          setLessons(lessonsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Lesson)));
-
-          // Dairies (Expired after 24 hours)
-          const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-          const dairiesQuery = query(
-            collection(db, 'dairies'), 
-            where('createdAt', '>', oneDayAgo),
-            orderBy('createdAt', 'desc')
-          );
-          const dairiesSnap = await getDocs(dairiesQuery);
-          setDairies(dairiesSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
-          // Assignments
+          // Fetch Assignments
           const assignmentsSnap = await getDocs(query(collection(db, 'assignments'), limit(3), orderBy('deadline', 'asc')));
           setAssignments(assignmentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Assignment)));
 
-          // Recent Submissions
+          // Fetch Submissions
           const subsQuery = profile.role === 'teacher' 
             ? query(collection(db, 'submissions'), limit(5), orderBy('submittedAt', 'desc'))
             : query(collection(db, 'submissions'), where('studentId', '==', profile.uid), limit(5), orderBy('submittedAt', 'desc'));
-          
           const subsSnap = await getDocs(subsQuery);
           setRecentSubmissions(subsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Submission)));
 
-          // Reminders (New)
+          // Fetch Reminders
+          let remindersQuery;
           if (profile.role === 'student' && profile.classIds && profile.classIds.length > 0) {
-            const remindersQuery = query(
-              collection(db, 'reminders'),
-              where('classId', 'in', profile.classIds),
-              orderBy('createdAt', 'desc'),
-              limit(3)
-            );
-            const remindersSnap = await getDocs(remindersQuery);
-            setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
+            remindersQuery = query(collection(db, 'reminders'), where('classId', 'in', profile.classIds), orderBy('createdAt', 'desc'), limit(3));
           } else if (profile.role === 'teacher') {
-            const remindersQuery = query(
-              collection(db, 'reminders'),
-              where('teacherId', '==', profile.uid),
-              orderBy('createdAt', 'desc'),
-              limit(3)
-            );
+            remindersQuery = query(collection(db, 'reminders'), where('teacherId', '==', profile.uid), orderBy('createdAt', 'desc'), limit(3));
+          }
+          if (remindersQuery) {
             const remindersSnap = await getDocs(remindersQuery);
             setReminders(remindersSnap.docs.map(d => ({ id: d.id, ...d.data() } as Reminder)));
           }
-        } else {
-          // Offline mode: load from storage
+        } else if (!isOnline) {
           const keys = await localforage.keys();
           const stored: Lesson[] = [];
           for (const key of keys.slice(0, 3)) {
@@ -155,8 +99,8 @@ export default function Dashboard() {
       }
     };
 
-    if (profile) fetchData();
-  }, [profile, isOnline]);
+    if (profile && !authLoading) fetchData();
+  }, [profile, isOnline, authLoading]);
 
   // Real-time online users listener
   useEffect(() => {
@@ -206,45 +150,29 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex gap-6 relative min-h-screen pb-20">
+    <div className="flex flex-col lg:flex-row gap-6 relative min-h-screen pb-20">
       {/* Feed Column */}
-      <div className="flex-1 max-w-[600px] space-y-6">
-        {/* Dairies Row (Top row for 24h photo/video style) */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
-            <div className="flex flex-col items-center gap-1 shrink-0 h-fit">
-              <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5 relative cursor-pointer hover:scale-105 transition-transform">
-                <img src={profile?.photoURL || 'https://via.placeholder.com/64'} className="w-full h-full rounded-full object-cover" alt="Me" />
-                <div className="absolute bottom-0 right-0 bg-indigo-600 text-white rounded-full p-1 border-2 border-white">
-                  <Plus size={10} />
-                </div>
-              </div>
-              <span className="text-[10px] font-bold text-slate-900 truncate w-16 text-center">Your Dairy</span>
+      <div className="flex-1 max-w-[700px] mx-auto w-full space-y-6">
+        {/* Mobile Teacher Tools */}
+        {profile?.role === 'teacher' && (
+          <div className="lg:hidden bg-gradient-to-br from-indigo-600 to-purple-700 rounded-2xl shadow-lg p-4 text-white flex items-center justify-between">
+            <div>
+              <h3 className="text-[10px] font-black uppercase tracking-widest">Professor Panel</h3>
+              <p className="text-xs font-bold text-indigo-100">Manage your virtual classrooms</p>
             </div>
-            {dairies.map((dairy) => (
-              <div key={dairy.id} className="flex flex-col items-center gap-1 shrink-0">
-                <div className="w-16 h-16 rounded-full border-2 border-indigo-500 p-0.5 cursor-pointer hover:scale-105 transition-transform">
-                  <img src={dairy.photoURL || 'https://via.placeholder.com/64'} className="w-full h-full rounded-full object-cover" alt="" />
-                </div>
-                <span className="text-[10px] font-bold text-slate-500 truncate w-16 text-center">{dairy.authorName}</span>
-              </div>
-            ))}
-            {dairies.length === 0 && [1, 2, 3].map((i) => (
-              <div key={i} className="flex flex-col items-center gap-1 shrink-0 opacity-50">
-                <div className="w-16 h-16 rounded-full border-2 border-slate-200 p-0.5">
-                  <div className="w-full h-full rounded-full bg-slate-100 flex items-center justify-center text-slate-400 text-xs">
-                    ...
-                  </div>
-                </div>
-                <span className="text-[10px] font-bold text-slate-400 truncate w-16 text-center">Classmate</span>
-              </div>
-            ))}
+            <button 
+              onClick={() => navigate('/classes')}
+              className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg active:scale-95"
+            >
+              <Plus size={14} className="inline mr-1" /> Create Class
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* What's Latest Box (Standalone Status Box) */}
+        {/* What's Latest Box (Standalone Status Box) - Social Media Main Feature */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4">
-          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">What's Latest, {profile?.gender === 'Male' ? 'Sir' : (profile?.gender === 'Female' ? 'Ma\'am' : profile?.displayName?.split(' ')[0])}?</h3>
+          <h3 className="text-sm font-black text-slate-900 uppercase tracking-[0.15em] mb-1">What's Latest, Teacher?</h3>
+
           <div className="flex items-start gap-4">
             <img src={profile?.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-indigo-50" alt="Me" />
             <div className="flex-1 space-y-3">
@@ -384,6 +312,7 @@ export default function Dashboard() {
                <p className="text-sm text-slate-700 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100/50 italic">"{rem.text}"</p>
             </div>
           ))}
+          </AnimatePresence>
 
           {/* Online Now Box - Always at the bottom of the feed */}
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 pt-4">

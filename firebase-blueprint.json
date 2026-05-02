@@ -112,6 +112,32 @@
       },
       "required": ["authorId", "authorName", "text"]
     },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Teacher status updates and class reminders",
+      "type": "object",
+      "properties": {
+        "teacherId": { "type": "string" },
+        "classId": { "type": "string" },
+        "text": { "type": "string" },
+        "type": { "type": "string", "enum": ["status", "reminder"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["teacherId", "classId", "text"]
+    },
+    "Class": {
+      "title": "Class",
+      "description": "Classroom groups",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "inviteCode": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "inviteCode", "teacherId"]
+    },
     "Notification": {
       "title": "Notification",
       "description": "In-app alerts",
