@@ -96,15 +96,15 @@ export default function Dashboard() {
         mediaUrl = await uploadWithProgress(postFile, 'posts', (progress) => {
           setUploadProgress(progress);
         });
-        mediaType = postFile.type.startsWith('image/') ? 'image' : 'file';
-        fileName = postFile.name;
-        fileSize = postFile.size;
+        mediaType = postFile?.type?.startsWith('image/') ? 'image' : 'file';
+        fileName = postFile?.name;
+        fileSize = postFile?.size;
       }
 
       const payload: any = {
-        authorId: profile.uid,
-        authorName: profile.displayName,
-        photoURL: profile.photoURL,
+        authorId: profile?.uid,
+        authorName: profile?.displayName,
+        photoURL: profile?.photoURL,
         text: newPostText,
         createdAt: serverTimestamp(),
         likes: 0
@@ -121,7 +121,7 @@ export default function Dashboard() {
 
       // YouTube Integration
       const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
-      const match = newPostText.match(youtubeRegex);
+      const match = newPostText?.match(youtubeRegex);
       if (match && match[1]) {
         payload.youtubeId = match[1];
       }
@@ -129,17 +129,17 @@ export default function Dashboard() {
       const postRef = await addDoc(collection(db, 'posts'), payload);
 
       // Notify accepted friends
-      const myFriends = friends.filter(f => f.status === 'accepted');
+      const myFriends = friends?.filter(f => f.status === 'accepted') || [];
       for (const friendship of myFriends) {
-        const friendId = friendship.user1 === profile.uid ? friendship.user2 : friendship.user1;
+        const friendId = friendship.user1 === profile?.uid ? friendship.user2 : friendship.user1;
         await addDoc(collection(db, 'notifications'), {
           userId: friendId,
           type: 'new_post',
-          authorId: profile.uid,
-          authorName: profile.displayName,
-          authorPhoto: profile.photoURL,
-          postId: postRef.id,
-          text: `${profile.displayName} posted a new update: "${newPostText.substring(0, 30)}..."`,
+          authorId: profile?.uid,
+          authorName: profile?.displayName,
+          authorPhoto: profile?.photoURL,
+          postId: postRef?.id,
+          text: `${profile?.displayName} posted a new update: "${newPostText?.substring(0, 30)}..."`,
           isRead: false,
           createdAt: serverTimestamp(),
           link: '/' // Redirect to dashboard
@@ -149,8 +149,9 @@ export default function Dashboard() {
       setNewPostText('');
       setPostFile(null);
       setUploadProgress(null);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      window.alert(`Dashboard Error: ${err?.message || 'Check connection'}. If stuck, please refresh.`);
     } finally {
       setPublishing(false);
     }

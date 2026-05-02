@@ -49,12 +49,18 @@
 }
 
 @utility glass-light {
-  @apply bg-white/80 backdrop-blur-lg border border-white/30;
+  @apply bg-white border border-white/30;
+  @supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+    @apply bg-white/80 backdrop-blur-lg;
+  }
   @apply gpu-accel;
 }
 
 @utility glass-dark {
-  @apply bg-slate-900/60 backdrop-blur-xl border border-white/10;
+  @apply bg-slate-900 border border-white/10;
+  @supports (backdrop-filter: blur(10px)) or (-webkit-backdrop-filter: blur(10px)) {
+    @apply bg-slate-900/60 backdrop-blur-xl;
+  }
   @apply gpu-accel;
 }
 

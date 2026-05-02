@@ -2,6 +2,12 @@ import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import imageCompression from 'browser-image-compression';
 
+/**
+ * Uploads a file to Firebase Storage with progress tracking and automatic image compression.
+ * @param file The file to upload
+ * @param path The storage path (folder)
+ * @param onProgress Callback function for upload progress (0-100)
+ */
 export async function uploadWithProgress(
   file: File,
   path: string,
@@ -9,18 +15,18 @@ export async function uploadWithProgress(
 ): Promise<string> {
   let fileToUpload = file;
 
-  // Compress image if applicable
+  // 1. Browser-side Image Compression (Safe for Mobile)
   if (file.type.startsWith('image/')) {
     const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
+      maxSizeMB: 0.8, // Target size under 1MB for mobile speed
+      maxWidthOrHeight: 1280,
       useWebWorker: true,
+      initialQuality: 0.7
     };
     try {
       fileToUpload = await imageCompression(file, options);
     } catch (error) {
-      console.error('Compression error:', error);
-      // Fallback to original file
+      console.warn('Compression failed, uploading original:', error);
     }
   }
 
@@ -28,9 +34,10 @@ export async function uploadWithProgress(
   const uploadTask = uploadBytesResumable(storageRef, fileToUpload);
 
   return new Promise((resolve, reject) => {
+    // 2. 30-Second Timeout "Connection Slow" Guard
     const timeout = setTimeout(() => {
       uploadTask.cancel();
-      reject(new Error('Connection slow: Upload timed out after 30 seconds.'));
+      reject(new Error('Connection slow: Upload timed out. Please check your signal.'));
     }, 30000);
 
     uploadTask.on(
@@ -45,8 +52,12 @@ export async function uploadWithProgress(
       },
       async () => {
         clearTimeout(timeout);
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        resolve(downloadURL);
+        try {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          resolve(downloadURL);
+        } catch (err) {
+          reject(err);
+        }
       }
     );
   });

@@ -290,13 +290,13 @@ export default function Chat() {
   const handleSendMessage = async (e?: React.FormEvent, media?: { type: 'image' | 'audio' | 'file', url: string, name?: string, size?: number }) => {
     e?.preventDefault();
     if (!profile) return;
-    if (!newMessage.trim() && !media) return;
+    if (!newMessage?.trim() && !media) return;
 
     try {
       const payload: any = {
-        senderId: profile.uid,
+        senderId: profile?.uid,
         createdAt: serverTimestamp(),
-        readBy: [profile.uid]
+        readBy: [profile?.uid]
       };
 
       if (chatType === 'class') {
@@ -304,33 +304,33 @@ export default function Chat() {
         payload.classId = selectedClassId;
       } else {
         if (!selectedUser) return;
-        payload.receiverId = selectedUser.uid;
+        payload.receiverId = selectedUser?.uid;
       }
 
       if (media) {
-        payload.mediaUrl = media.url;
-        payload.mediaType = media.type;
-        if (media.type === 'file') {
-          payload.fileName = media.name;
-          payload.fileSize = media.size;
+        payload.mediaUrl = media?.url;
+        payload.mediaType = media?.type;
+        if (media?.type === 'file') {
+          payload.fileName = media?.name;
+          payload.fileSize = media?.size;
         }
       } else {
         payload.text = newMessage;
         
         // YouTube Integration: Detect YouTube link
         const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/(?:watch\?v=)?([^&?\s]+)/;
-        const match = newMessage.match(youtubeRegex);
+        const match = newMessage?.match(youtubeRegex);
         if (match && match[1]) {
           const videoId = match[1];
           try {
             // Simple metadata fetch via oembed
             const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
-            if (response.ok) {
+            if (response?.ok) {
               const data = await response.json();
               payload.youtubeMetadata = {
                 videoId: videoId,
-                title: data.title,
-                thumbnailUrl: data.thumbnail_url
+                title: data?.title,
+                thumbnailUrl: data?.thumbnail_url
               };
             } else {
               // Fallback if oembed fails
@@ -356,12 +356,13 @@ export default function Chat() {
       setAudioBlob(null);
 
       // Undo logic
-      setLastMessageId(docRef.id);
+      setLastMessageId(docRef?.id);
       setShowUndo(true);
       if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
       undoTimeoutRef.current = setTimeout(() => setShowUndo(false), 5000);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      window.alert(`Chat Error: ${err?.message || 'Check connection'}. If stuck at 0%, refresh app.`);
     }
   };
 
@@ -484,6 +485,15 @@ export default function Chat() {
   };
 
   const activeClassName = selectedClassId === TEACHERS_LOUNGE_ID ? 'Teachers Lounge' : (classes.find(c => c.id === selectedClassId)?.name || 'Classroom');
+
+  if (!messages) return (
+    <div className="flex h-full items-center justify-center bg-white/50 backdrop-blur-md">
+      <div className="p-8 glass-light rounded-3xl shadow-xl flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+        <p className="text-sm font-black text-slate-900 uppercase tracking-widest">Encrypting Messenger...</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-xl overflow-hidden flex h-[calc(100vh-10rem)] md:h-[calc(100vh-12rem)] relative flex-col md:flex-row">
@@ -671,8 +681,8 @@ export default function Chat() {
                   <div key={m.id}>
                     {showDate && (
                       <div className="flex justify-center my-8">
-                        <span className="px-4 py-1.5 bg-white border border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
-                          {m.createdAt ? format(m.createdAt.toDate(), 'MMMM d, yyyy') : 'Today'}
+                        <span className="px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
+                          {m?.createdAt ? format(m?.createdAt?.toDate?.() || new Date(), 'MMMM d, yyyy') : 'Sending...'}
                         </span>
                       </div>
                     )}
