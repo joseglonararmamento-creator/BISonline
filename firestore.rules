@@ -79,6 +79,10 @@ service cloud.firestore {
 
     // --- Rules ---
 
+    match /test/connection {
+      allow read: if true;
+    }
+
     match /users/{userId} {
       allow get: if isSignedIn();
       allow list: if isTeacher();
@@ -87,7 +91,7 @@ service cloud.firestore {
         && (
           incoming().diff(existing()).affectedKeys().hasOnly([
             'displayName', 'photoURL', 'role', 'classNumber', 'classId', 'classIds', 
-            'subjectHandled', 'yearsOfTeaching', 'gender', 'bio', 'isOnline', 'lastActive', 'updatedAt'
+            'subjectHandled', 'yearsOfTeaching', 'gender', 'bio', 'isOnline', 'lastActive', 'updatedAt', 'email'
           ])
           || isTeacher()
         );

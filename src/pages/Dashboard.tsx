@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Lesson, Assignment, Submission, Reminder, UserProfile, Post, Friendship, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import localforage from 'localforage';
-import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil, Loader2 } from 'lucide-react';
+import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil, Loader2, Check } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { getSafeDate } from '../lib/dateUtils';
