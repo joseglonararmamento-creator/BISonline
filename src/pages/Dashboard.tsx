@@ -12,6 +12,7 @@ import { getSafeDate } from '../lib/dateUtils';
 import ShareModal from '../components/ShareModal';
 import StudyAssistant from '../components/StudyAssistant';
 import { PostSkeleton } from '../components/Skeleton';
+import { BrandLogo } from '../components/BrandLogo';
 
 export default function Dashboard() {
   const { profile, isOnline, loading: authLoading } = useAuth();
@@ -34,6 +35,7 @@ export default function Dashboard() {
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showMobilePost, setShowMobilePost] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   useEffect(() => {
     if (!isOnline) return;
@@ -156,6 +158,9 @@ export default function Dashboard() {
       setNewPostText('');
       setPostFile(null);
       setUploadProgress(null);
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 3000);
+      if (showMobilePost) setShowMobilePost(false);
     } catch (err: any) {
       console.error(err);
       window.alert(`Dashboard Error: ${err?.message || 'Check connection'}. If stuck, please refresh.`);
@@ -333,6 +338,26 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Success Toast */}
+      <AnimatePresence>
+        {showSuccessToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="fixed top-20 right-6 z-[100] bg-emerald-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 border border-emerald-500/50"
+          >
+            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
+              <Check size={20} />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest">Update Posted</p>
+              <p className="text-[10px] text-emerald-100 font-bold">Successfully shared with the campus!</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Mobile Floating Action Button */}
       {profile?.role === 'teacher' && (
         <div className="fixed bottom-20 right-6 z-40 lg:hidden">
@@ -526,7 +551,7 @@ export default function Dashboard() {
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
-                        <img src="/logo.png" className="w-full h-full object-contain" alt="BIS" />
+                        <BrandLogo size={40} className="object-contain" />
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>

@@ -36,6 +36,7 @@ import {
 import { format } from 'date-fns';
 
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { BrandLogo } from './components/BrandLogo';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -74,7 +75,7 @@ const Sidebar = () => {
     <aside className="w-64 glass-light border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col z-40 gpu-accel">
       <div className="p-6">
         <div className="flex items-center gap-3 text-slate-900 mb-8">
-          <img src="/logo.png" className="w-10 h-10 object-contain drop-shadow-sm rounded-full" alt="BIS Logo" />
+          <BrandLogo size={40} className="object-contain drop-shadow-sm rounded-full" />
           <div className="flex flex-col">
             <span className="text-xl font-black tracking-tighter font-display leading-tight">BISonline</span>
             <span className="text-[8px] font-black uppercase text-indigo-600 tracking-[0.2em]">Integrated School</span>
@@ -370,7 +371,7 @@ const Navbar = () => {
               onClick={() => setShowOnlineDropdown(!showOnlineDropdown)}
               className="flex items-center gap-2 group transition-all active:scale-95"
             >
-              <img src="/logo.png" className="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm rounded-full" alt="BIS Logo" />
+              <BrandLogo size={40} className="object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm rounded-full" />
               <span className="hidden sm:inline text-xl font-black tracking-tighter font-display text-slate-900">BISonline</span>
             </button>
 
@@ -807,7 +808,7 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         transition={{ duration: 0.5 }}
         className="mb-8 flex flex-col items-center"
       >
-        <img src="/logo.png" className="w-24 h-24 object-contain mb-4 drop-shadow-2xl" alt="BIS Logo" />
+        <BrandLogo size={96} className="object-contain mb-4 drop-shadow-2xl" />
         <h1 className="text-3xl font-black text-slate-900 tracking-tighter">BISonline</h1>
         <div className="w-24 h-1 bg-indigo-600 rounded-full mt-2" />
       </motion.div>
