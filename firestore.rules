@@ -158,7 +158,8 @@ service cloud.firestore {
 
     match /classes/{classId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isTeacher();
+      allow create, delete: if isTeacher();
+      allow update: if isTeacher() || (isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['lastRead', 'lastMessageTime']));
       
       match /messages/{messageId} {
         allow read: if isSignedIn() && (
@@ -177,7 +178,7 @@ service cloud.firestore {
       allow read: if isSignedIn() && chatId.contains(request.auth.uid);
       allow create: if isSignedIn() && chatId.contains(request.auth.uid);
       allow update: if isSignedIn() && chatId.contains(request.auth.uid) 
-        && incoming().diff(existing()).affectedKeys().hasOnly(['lastRead']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastRead', 'lastMessageTime']);
 
       match /messages/{messageId} {
         allow read: if isSignedIn() && chatId.contains(request.auth.uid);
