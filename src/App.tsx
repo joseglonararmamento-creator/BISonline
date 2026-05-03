@@ -73,9 +73,12 @@ const Sidebar = () => {
   return (
     <aside className="w-64 glass-light border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col z-40 gpu-accel">
       <div className="p-6">
-        <div className="flex items-center gap-2 text-indigo-600 mb-8 neon-glow-indigo">
-          <GraduationCap size={32} strokeWidth={2.5} />
-          <span className="text-2xl font-bold tracking-tighter font-display">BISonline</span>
+        <div className="flex items-center gap-3 text-slate-900 mb-8">
+          <img src="/logo.png" className="w-10 h-10 object-contain drop-shadow-sm" alt="BIS Logo" />
+          <div className="flex flex-col">
+            <span className="text-xl font-black tracking-tighter font-display leading-tight">BISonline</span>
+            <span className="text-[8px] font-black uppercase text-indigo-600 tracking-[0.2em]">Integrated School</span>
+          </div>
         </div>
         
         <nav className="space-y-1">
@@ -337,9 +340,9 @@ const Navbar = () => {
     <header className={`fixed top-0 left-0 right-0 h-14 glass-light border-b transition-all duration-500 z-50 ${isConfessions ? 'border-pink-500/30 ring-1 ring-pink-500/10' : 'border-indigo-500/30'}`}>
       <div className="max-w-[1240px] mx-auto h-full flex items-center justify-between px-4">
         <div className="flex items-center gap-4">
-          <Link to="/" className={`flex items-center gap-2 transition-all duration-500 ${isConfessions ? 'text-pink-500 neon-glow-pink' : 'text-indigo-600 neon-glow-indigo'}`}>
-            <GraduationCap size={28} strokeWidth={2.5} />
-            <span className="hidden sm:inline text-xl font-black tracking-tighter font-display">BISonline</span>
+          <Link to="/" className="flex items-center gap-2 group">
+            <img src="/logo.png" className="w-8 h-8 object-contain group-hover:scale-110 transition-transform duration-300" alt="BIS Logo" />
+            <span className="hidden sm:inline text-xl font-black tracking-tighter font-display text-slate-900">BISonline</span>
           </Link>
         </div>
 
@@ -688,13 +691,23 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }, [loading]);
 
   if (loading && !dismissLoader) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 z-[9999]">
+    <div className="h-screen flex flex-col items-center justify-center bg-[#F0F2F5] z-[9999]">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8 flex flex-col items-center"
+      >
+        <img src="/logo.png" className="w-24 h-24 object-contain mb-4 drop-shadow-2xl" alt="BIS Logo" />
+        <h1 className="text-3xl font-black text-slate-900 tracking-tighter">BISonline</h1>
+        <div className="w-24 h-1 bg-indigo-600 rounded-full mt-2" />
+      </motion.div>
       <motion.div 
         animate={{ rotate: 360 }}
         transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-        className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full mb-4"
+        className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mb-4"
       />
-      <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Initializing BISonline...</p>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">Binaliw Integrated School</p>
       <button 
         onClick={() => setDismissLoader(true)}
         className="mt-8 text-[10px] font-black text-slate-300 hover:text-indigo-600 transition-all uppercase tracking-[0.2em] flex items-center gap-2"

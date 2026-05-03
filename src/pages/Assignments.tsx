@@ -19,6 +19,7 @@ import {
   X
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { getSafeDate } from '../lib/dateUtils';
 
 export default function Assignments() {
   const { profile } = useAuth();
@@ -242,7 +243,10 @@ export default function Assignments() {
                 </div>
                 <div className="flex items-center gap-2 text-[10px] sm:text-xs text-slate-500 uppercase font-black tracking-widest">
                   <Clock size={14} className="text-red-400" />
-                  <span>Due {format(assignment.deadline.toDate(), 'MMM d, h:mm a')}</span>
+                  <span>Due {(() => {
+                    const d = getSafeDate(assignment.deadline);
+                    return d ? format(d, 'MMM d, h:mm a') : 'TBA';
+                  })()}</span>
                 </div>
                 {mySubmission?.status === 'graded' && (
                   <div className="mt-3 px-3 py-1 bg-indigo-50 text-indigo-600 text-[10px] uppercase font-black rounded-lg inline-block">
@@ -283,7 +287,12 @@ export default function Assignments() {
                 </div>
                 <div>
                   <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-0.5">Deadline</p>
-                  <p className="text-slate-900 font-bold text-sm sm:text-base">{format(selectedAssignment.deadline.toDate(), 'PPPP p')}</p>
+                  <p className="text-slate-900 font-bold text-sm sm:text-base">
+                    {(() => {
+                      const d = getSafeDate(selectedAssignment.deadline);
+                      return d ? format(d, 'PPPP p') : 'TBA';
+                    })()}
+                  </p>
                 </div>
               </div>
 
@@ -371,7 +380,12 @@ export default function Assignments() {
                             </div>
                             <div>
                               <p className="font-bold text-slate-900">Student ID: {sub.studentId.substring(0, 8)}...</p>
-                              <p className="text-xs text-slate-500">{format(sub.submittedAt?.toDate() || new Date(), 'Pp')}</p>
+                              <p className="text-xs text-slate-500">
+                                {(() => {
+                                  const d = getSafeDate(sub.submittedAt);
+                                  return d ? format(d, 'Pp') : 'Now';
+                                })()}
+                              </p>
                             </div>
                           </div>
                           {sub.status === 'graded' ? (

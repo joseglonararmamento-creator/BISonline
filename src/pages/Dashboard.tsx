@@ -8,6 +8,7 @@ import localforage from 'localforage';
 import { BookOpen, ClipboardList, CheckCircle2, Clock, ArrowRight, TrendingUp, AlertCircle, MessageSquare, CloudOff, Share2, Megaphone, LayoutDashboard, User, MessageCircle, ExternalLink, X, Plus, Send, Trash2, Heart, Paperclip, Youtube, Download, FileText, MoreVertical, Pencil, Loader2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { getSafeDate } from '../lib/dateUtils';
 import ShareModal from '../components/ShareModal';
 import StudyAssistant from '../components/StudyAssistant';
 import { PostSkeleton } from '../components/Skeleton';
@@ -532,11 +533,16 @@ export default function Dashboard() {
                   >
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold shadow-inner">B</div>
+                      <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center overflow-hidden border border-slate-100 shadow-sm">
+                        <img src="/logo.png" className="w-full h-full object-contain" alt="BIS" />
+                      </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1">
-                          Lesson • {item?.createdAt ? format(item.createdAt.toDate(), 'MMM d') : 'Recently'}
+                          {(() => {
+                            const d = getSafeDate(item.createdAt);
+                            return d ? `Lesson • ${format(d, 'MMM d')}` : 'Lesson • Recently';
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -679,7 +685,7 @@ export default function Dashboard() {
            <div className="space-y-4">
              {lessons.slice(0, 2).map(l => (
                <div key={l.id} className="relative pl-4 border-l-2 border-indigo-100">
-                  <p className="text-[10px] font-black text-indigo-600 uppercase mb-0.5">{l.createdAt ? format(l.createdAt.toDate(), 'EEEE') : 'Soon'}</p>
+                  <p className="text-[10px] font-black text-indigo-600 uppercase mb-0.5">{(() => { const d = getSafeDate(l.createdAt); return d ? format(d, 'EEEE') : 'Soon'; })()}</p>
                   <p className="text-xs font-bold text-slate-800 line-clamp-1">{l.title}</p>
                </div>
              ))}
@@ -1029,7 +1035,10 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
             </Link>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1.5">
               <Clock size={10} />
-              {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, yyyy • h:mm a') : 'Just now'}
+              {(() => {
+                const d = getSafeDate(post.createdAt);
+                return d ? format(d, 'MMM d, yyyy • h:mm a') : 'Just now';
+              })()}
             </p>
           </div>
         </div>
@@ -1195,7 +1204,10 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
                     <div className="flex items-center justify-between mb-1">
                       <h5 className="text-[11px] font-bold text-slate-900">{comment.authorName}</h5>
                       <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">
-                        {comment.createdAt ? format(comment.createdAt.toDate(), 'h:mm a') : 'Now'}
+                        {(() => {
+                          const d = getSafeDate(comment.createdAt);
+                          return d ? format(d, 'h:mm a') : 'Now';
+                        })()}
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 leading-relaxed">{comment.text}</p>

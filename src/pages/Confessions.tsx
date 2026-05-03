@@ -6,6 +6,7 @@ import { Confession, Comment } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Send, Heart, MessageSquare, Image as ImageIcon, Trash2, Shield, User, Ghost, Clock, SendHorizontal, X, Paperclip, Youtube, FileText, Download, MoreVertical, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
+import { getSafeDate } from '../lib/dateUtils';
 import { uploadFile } from '../services/uploadService';
 import { ConfessionSkeleton } from '../components/Skeleton';
 
@@ -436,7 +437,10 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
               <h4 className="text-sm font-black text-white">{confession.authorName}</h4>
               <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-1.5">
                 <Clock size={10} />
-                {confession.createdAt ? format(confession.createdAt.toDate(), 'MMM d, yyyy • h:mm a') : 'Just now'}
+                {(() => {
+                  const d = getSafeDate(confession.createdAt);
+                  return d ? format(d, 'MMM d, yyyy • h:mm a') : 'Just now';
+                })()}
               </p>
             </div>
           </div>
@@ -612,7 +616,10 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
                       <div className="flex items-center justify-between mb-1">
                         <h5 className="text-[10px] font-black text-white">{comment.authorName}</h5>
                         <span className="text-[9px] text-slate-500 font-bold tracking-tight">
-                          {comment.createdAt ? format(comment.createdAt.toDate(), 'h:mm a') : 'Now'}
+                          {(() => {
+                            const d = getSafeDate(comment.createdAt);
+                            return d ? format(d, 'h:mm a') : 'Now';
+                          })()}
                         </span>
                       </div>
                       <p className="text-xs text-slate-300 font-medium">{comment.text}</p>

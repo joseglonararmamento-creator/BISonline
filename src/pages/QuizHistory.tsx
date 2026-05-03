@@ -17,6 +17,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { format } from 'date-fns';
+import { getSafeDate } from '../lib/dateUtils';
 
 const pendingAttemptsStore = localforage.createInstance({
   name: "EduConnect",
@@ -212,7 +213,10 @@ export default function QuizHistory() {
                     </div>
                     <div className="flex items-center gap-1">
                       <Calendar size={12} />
-                      {attempt.completedAt ? format(attempt.completedAt.toDate(), 'MMM d, yyyy') : 'No Date'}
+                      {(() => {
+                        const d = getSafeDate(attempt.completedAt);
+                        return d ? format(d, 'MMM d, yyyy') : 'No Date';
+                      })()}
                     </div>
                     {profile?.role === 'teacher' && (
                       <div className="text-[10px] font-medium text-indigo-400">
@@ -332,7 +336,10 @@ export default function QuizHistory() {
                       <td className="p-6">
                         <div className="flex items-center gap-2 text-slate-500 text-sm">
                           <Calendar size={14} />
-                          {attempt.completedAt ? format(attempt.completedAt.toDate(), 'MMM d, yyyy') : 'No Date'}
+                          {(() => {
+                            const d = getSafeDate(attempt.completedAt);
+                            return d ? format(d, 'MMM d, yyyy') : 'No Date';
+                          })()}
                         </div>
                       </td>
                       <td className="p-6 text-right">

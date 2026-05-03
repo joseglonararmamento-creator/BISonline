@@ -8,6 +8,7 @@ import {
   addDoc, 
   serverTimestamp, 
   updateDoc, 
+  setDoc,
   doc, 
   deleteDoc,
   limit,
@@ -45,6 +46,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
 import { uploadWithProgress } from '../services/storageService';
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
+import { getSafeDate } from '../lib/dateUtils';
 
 interface Message {
   id: string;
@@ -113,6 +115,8 @@ export default function Chat() {
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [showUndo, setShowUndo] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [unreadCounts, setUnreadCounts] = useState<{ [id: string]: number }>({});
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,7 +138,8 @@ export default function Chat() {
     const unsubscribeTyping = onSnapshot(typingRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        const isTyping = data.isTyping && (Date.now() - (data.updatedAt?.toMillis() || 0) < 10000);
+        const updatedDate = getSafeDate(data.updatedAt);
+        const isTyping = data.isTyping && updatedDate && (Date.now() - updatedDate.getTime() < 10000);
         setOtherUserTyping(!!isTyping);
       } else {
         setOtherUserTyping(false);
@@ -161,9 +166,6 @@ export default function Chat() {
     const typingRef = doc(db, `chats/${chatId}/typing`, profile.uid);
     
     try {
-      // Use dynamic import for setDoc if not available, but it's not even needed if I just import it at top.
-      // I'll check imports.
-      const { setDoc } = await import('firebase/firestore');
       await setDoc(typingRef, {
         isTyping,
         updatedAt: serverTimestamp()
@@ -174,25 +176,96 @@ export default function Chat() {
   };
 
   const markAsRead = async () => {
-    if (!profile || chatType !== 'dm' || !selectedUser || !messages?.length) return;
-    const chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
-    const chatRef = doc(db, 'chats', chatId);
+    if (!profile || !messages?.length) return;
     
     try {
-      const { setDoc } = await import('firebase/firestore');
-      await setDoc(chatRef, {
-        lastRead: { [profile.uid]: serverTimestamp() }
-      }, { merge: true });
+      if (chatType === 'dm' && selectedUser) {
+        const chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+        const chatRef = doc(db, 'chats', chatId);
+        await setDoc(chatRef, {
+          lastRead: { [profile.uid]: serverTimestamp() }
+        }, { merge: true });
+      } else if (chatType === 'class' && selectedClass) {
+        const classRef = doc(db, 'classes', selectedClass.id);
+        await setDoc(classRef, {
+          lastRead: { [profile.uid]: serverTimestamp() }
+        }, { merge: true });
+      }
     } catch (e) {
       console.error("Read status error", e);
     }
   };
 
   useEffect(() => {
-    if (messages?.length && chatType === 'dm') {
+    if (messages?.length) {
       markAsRead();
     }
-  }, [messages?.length, chatType]);
+  }, [messages?.length, chatType, selectedUser?.uid, selectedClass?.id]);
+
+  useEffect(() => {
+    if (!profile) return;
+    
+    const userRef = doc(db, 'users', profile.uid);
+    updateDoc(userRef, { isOnline: true });
+
+    const handleVisibilityChange = () => {
+      updateDoc(userRef, { isOnline: document.visibilityState === 'visible' });
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      updateDoc(userRef, { isOnline: false });
+    };
+  }, [profile?.uid]);
+
+  useEffect(() => {
+    if (!profile || users.length === 0) return;
+
+    // Monitor all chats for unread messages
+    const unsubscribeFns: (() => void)[] = [];
+
+    // For DMs
+    users.forEach(u => {
+      const chatId = profile.uid < u.uid ? `${profile.uid}_${u.uid}` : `${u.uid}_${profile.uid}`;
+      const chatRef = doc(db, 'chats', chatId);
+      const unsub = onSnapshot(chatRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const lastRead = getSafeDate(data.lastRead?.[profile.uid]);
+          const lastMessageTime = getSafeDate(data.lastMessageTime);
+          
+          if (lastMessageTime && (!lastRead || lastMessageTime > lastRead)) {
+            setUnreadCounts(prev => ({ ...prev, [u.uid]: 1 }));
+          } else {
+            setUnreadCounts(prev => ({ ...prev, [u.uid]: 0 }));
+          }
+        }
+      });
+      unsubscribeFns.push(unsub);
+    });
+
+    // For Classes
+    userClasses.forEach(c => {
+      const chatRef = doc(db, 'classes', c.id);
+      const unsub = onSnapshot(chatRef, (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          const lastRead = getSafeDate(data.lastRead?.[profile.uid]);
+          const lastMessageTime = getSafeDate(data.lastMessageTime);
+          
+          if (lastMessageTime && (!lastRead || lastMessageTime > lastRead)) {
+            setUnreadCounts(prev => ({ ...prev, [c.id]: 1 }));
+          } else {
+            setUnreadCounts(prev => ({ ...prev, [c.id]: 0 }));
+          }
+        }
+      });
+      unsubscribeFns.push(unsub);
+    });
+
+    return () => unsubscribeFns.forEach(fn => fn());
+  }, [profile?.uid, users.length, userClasses.length]);
 
   useEffect(() => {
     if (!profile) return;
@@ -205,17 +278,22 @@ export default function Chat() {
 
   useEffect(() => {
     if (!profile) return;
+    
+    // Use a map to track classes and avoid duplicates
+    const classesMap: { [id: string]: any } = {};
+
+    const updateClasses = (snap: any) => {
+      snap.docs.forEach((d: any) => {
+        classesMap[d.id] = { id: d.id, ...d.data() };
+      });
+      setUserClasses(Object.values(classesMap));
+    };
+
     const q = query(collection(db, 'classes'), where('students', 'array-contains', profile.uid));
     const teacherQ = query(collection(db, 'classes'), where('teacherId', '==', profile.uid));
     
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const classes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setUserClasses(prev => [...prev, ...classes]);
-    });
-    const unsubscribeTeacher = onSnapshot(teacherQ, (snap) => {
-      const classes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setUserClasses(prev => [...prev, ...classes]);
-    });
+    const unsubscribe = onSnapshot(q, updateClasses);
+    const unsubscribeTeacher = onSnapshot(teacherQ, updateClasses);
     
     return () => {
       unsubscribe();
@@ -233,7 +311,7 @@ export default function Chat() {
     }
 
     if (!q) {
-      setMessages([]);
+      setMessages(null);
       return;
     }
 
@@ -247,18 +325,6 @@ export default function Chat() {
 
     return () => unsubscribe();
   }, [chatType, selectedUser, selectedClass, profile?.uid]);
-
-  const getSafeDate = (createdAt: any) => {
-    if (!createdAt) return null;
-    try {
-      if (typeof createdAt.toDate === 'function') return createdAt.toDate();
-      // Handle timestamp-like objects
-      if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
-    } catch (e) {
-      console.error("Date parse error", e);
-    }
-    return null;
-  };
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -301,6 +367,14 @@ export default function Chat() {
       
       console.log("DEBUG: Adding doc to:", colPath);
       const docRef = await addDoc(collection(db, colPath), payload);
+
+      if (chatType === 'dm') {
+        const chatRef = doc(db, 'chats', chatId);
+        await setDoc(chatRef, { lastMessageTime: serverTimestamp() }, { merge: true });
+      } else if (chatType === 'class') {
+        const classRef = doc(db, 'classes', chatId);
+        await setDoc(classRef, { lastMessageTime: serverTimestamp() }, { merge: true });
+      }
       
       // Update undo state
       setShowUndo(docRef.id);
@@ -445,6 +519,23 @@ export default function Chat() {
     }
   };
 
+  const handleDeleteMessage = async (messageId: string) => {
+    if (!profile) return;
+    let chatId = '';
+    if (chatType === 'dm' && selectedUser) {
+      chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+    } else if (chatType === 'class' && selectedClass) {
+      chatId = selectedClass.id;
+    }
+    const colPath = chatType === 'dm' ? `chats/${chatId}/messages` : `classes/${chatId}/messages`;
+    
+    try {
+      await deleteDoc(doc(db, colPath, messageId));
+    } catch (err: any) {
+      alert("Delete failed: " + err.message);
+    }
+  };
+
   const handleAddReaction = async (messageId: string, emoji: string) => {
     if (!profile) return;
     let chatId = '';
@@ -495,6 +586,8 @@ export default function Chat() {
             <input 
               type="text" 
               placeholder="Contacts, classes..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
           </div>
@@ -517,33 +610,41 @@ export default function Chat() {
 
         <div className="flex-1 overflow-y-auto px-4 space-y-2">
           {chatType === 'dm' ? (
-            users.map(u => (
+            users.filter(u => u.displayName.toLowerCase().includes(searchQuery.toLowerCase())).map(u => (
               <button 
                 key={u.uid}
                 onClick={() => setSelectedUser(u)}
-                className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-all ${selectedUser?.uid === u.uid ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50'}`}
+                className={`w-full p-3 rounded-2xl flex items-center gap-3 transition-all group ${selectedUser?.uid === u.uid ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50'}`}
               >
                 <div className="relative">
                   <img src={u.photoURL || 'https://via.placeholder.com/40'} className="w-10 h-10 rounded-full border-2 border-white shadow-sm" alt="" />
                   {u.isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />}
                 </div>
                 <div className="text-left flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate">{u.displayName}</p>
+                  <div className="flex justify-between items-center">
+                    <p className="text-xs font-bold truncate">{u.displayName}</p>
+                    {unreadCounts[u.uid] > 0 && (
+                      <div className="w-2 h-2 bg-indigo-600 rounded-full animate-pulse" />
+                    )}
+                  </div>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{u.role}</p>
                 </div>
               </button>
             ))
           ) : (
-            userClasses.map(c => (
+            userClasses.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase())).map(c => (
               <button 
                 key={c.id}
                 onClick={() => setSelectedClass(c)}
                 className={`w-full p-4 rounded-2xl flex items-center gap-3 transition-all ${selectedClass?.id === c.id ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-slate-50'}`}
               >
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center text-indigo-600 shadow-sm relative">
                   <Book size={20} />
+                  {unreadCounts[c.id] > 0 && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-600 rounded-full border-2 border-white animate-pulse" />
+                  )}
                 </div>
-                <div className="text-left">
+                <div className="text-left flex-1 min-w-0">
                   <p className="text-xs font-bold truncate">{c.name}</p>
                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{c.teacherName}</p>
                 </div>
@@ -592,11 +693,12 @@ export default function Chat() {
             </div>
 
             {/* Messages Feed */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-slate-50/30">
+            <div className="flex-1 overflow-y-auto p-6 space-y-1 bg-slate-50/30">
               {(messages || []).map((m, index) => {
                 const isMine = m?.senderId === profile?.uid;
                 const sender = users?.find(u => u?.uid === m?.senderId);
                 const prevMsg = index > 0 ? (messages || [])[index - 1] : null;
+                const isSameSender = prevMsg?.senderId === m?.senderId;
                 
                 const mDate = getSafeDate(m.createdAt);
                 const pDate = getSafeDate(prevMsg?.createdAt);
@@ -606,7 +708,7 @@ export default function Chat() {
                   format(mDate, 'yyyy-MM-dd') !== format(pDate, 'yyyy-MM-dd'));
 
                 return (
-                  <div key={m?.id || index}>
+                  <div key={m?.id || index} className={isSameSender ? 'pt-0.5' : 'pt-4'}>
                     {showDate && mDate && (
                       <div className="flex justify-center my-8">
                         <span className="px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
@@ -616,7 +718,7 @@ export default function Chat() {
                     )}
                     <div className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
                       <div className={`max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col relative`}>
-                        {!isMine && chatType === 'class' && (
+                        {!isMine && chatType === 'class' && !isSameSender && (
                           <span className="text-[10px] font-bold text-slate-500 ml-2 mb-1 flex items-center gap-1">
                              {sender?.displayName || 'Member'}
                           </span>
@@ -627,7 +729,7 @@ export default function Chat() {
                             isMine 
                               ? 'bg-indigo-600 text-white rounded-br-none' 
                               : 'bg-white border border-slate-100 text-slate-800 rounded-bl-none'
-                          }`}>
+                          } ${isSameSender && (isMine ? 'rounded-tr-none' : 'rounded-tl-none')}`}>
                             {m?.mediaType === 'image' && (
                               <img src={m?.mediaUrl} className="rounded-lg mb-2 max-w-full" alt="" />
                             )}
@@ -665,15 +767,26 @@ export default function Chat() {
                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
                                {mDate ? format(mDate, 'h:mm a') : 'Sending...'}
                              </span>
-                             {isMine && chatType === 'dm' && otherUserLastRead && mDate && mDate <= otherUserLastRead.toDate() && (
-                               <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Read</span>
-                             )}
+                             {(() => {
+                               const otherReadDate = getSafeDate(otherUserLastRead);
+                               return isMine && chatType === 'dm' && otherReadDate && mDate && mDate <= otherReadDate && (
+                                 <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Read</span>
+                               );
+                             })()}
                              <button 
                                onClick={() => setShowReactionPicker(showReactionPicker === m?.id ? null : m?.id)}
                                className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-600"
                              >
                                <Smile size={10} />
                              </button>
+                             {isMine && (
+                               <button 
+                                 onClick={() => handleDeleteMessage(m.id)}
+                                 className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-red-500"
+                               >
+                                 <Trash2 size={10} />
+                               </button>
+                             )}
                           </div>
 
                           <AnimatePresence>

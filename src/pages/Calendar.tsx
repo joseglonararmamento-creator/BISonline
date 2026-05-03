@@ -28,6 +28,7 @@ import {
   addDays, 
   eachDayOfInterval 
 } from 'date-fns';
+import { getSafeDate } from '../lib/dateUtils';
 
 export default function CalendarPage() {
   const { profile } = useAuth();
@@ -87,8 +88,14 @@ export default function CalendarPage() {
   const calendarDays = eachDayOfInterval({ start: startDate, end: endDate });
 
   const dayEvents = (day: Date) => {
-    const evs = events.filter(e => isSameDay(e.date.toDate(), day));
-    const asgs = assignments.filter(a => isSameDay(a.deadline.toDate(), day));
+    const evs = events.filter(e => {
+      const d = getSafeDate(e.date);
+      return d ? isSameDay(d, day) : false;
+    });
+    const asgs = assignments.filter(a => {
+      const d = getSafeDate(a.deadline);
+      return d ? isSameDay(d, day) : false;
+    });
     return { events: evs, assignments: asgs };
   };
 
@@ -202,7 +209,10 @@ export default function CalendarPage() {
                     <h5 className="font-bold text-blue-900 text-sm mb-1">{e.title}</h5>
                     <p className="text-xs text-blue-600/80 mb-2">{e.description}</p>
                     <div className="flex items-center gap-2 text-[10px] font-bold text-blue-500 bg-white/50 px-2 py-0.5 rounded-lg inline-flex">
-                      <Clock size={10} /> {format(e.date.toDate(), 'h:mm a')}
+                      <Clock size={10} /> {(() => {
+                        const d = getSafeDate(e.date);
+                        return d ? format(d, 'h:mm a') : 'TBA';
+                      })()}
                     </div>
                   </div>
                   {profile?.role === 'teacher' && (
@@ -223,7 +233,10 @@ export default function CalendarPage() {
                   <h5 className="font-bold text-red-900 text-sm mb-1">{a.title} (Deadline)</h5>
                   <p className="text-xs text-red-600/80 mb-2 leading-tight">Student submission deadline for this module.</p>
                   <div className="flex items-center gap-2 text-[10px] font-bold text-red-500 bg-white/50 px-2 py-0.5 rounded-lg inline-flex">
-                    <Clock size={10} /> {format(a.deadline.toDate(), 'h:mm a')}
+                    <Clock size={10} /> {(() => {
+                      const d = getSafeDate(a.deadline);
+                      return d ? format(d, 'h:mm a') : 'TBA';
+                    })()}
                   </div>
                 </motion.div>
               ))}
