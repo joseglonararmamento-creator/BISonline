@@ -74,7 +74,7 @@ const Sidebar = () => {
     <aside className="w-64 glass-light border-r border-slate-200 h-screen sticky top-0 hidden lg:flex flex-col z-40 gpu-accel">
       <div className="p-6">
         <div className="flex items-center gap-3 text-slate-900 mb-8">
-          <img src="/logo.png" className="w-10 h-10 object-contain drop-shadow-sm" alt="BIS Logo" />
+          <img src="/logo.png" className="w-10 h-10 object-contain drop-shadow-sm rounded-full" alt="BIS Logo" />
           <div className="flex flex-col">
             <span className="text-xl font-black tracking-tighter font-display leading-tight">BISonline</span>
             <span className="text-[8px] font-black uppercase text-indigo-600 tracking-[0.2em]">Integrated School</span>
@@ -370,7 +370,7 @@ const Navbar = () => {
               onClick={() => setShowOnlineDropdown(!showOnlineDropdown)}
               className="flex items-center gap-2 group transition-all active:scale-95"
             >
-              <img src="/logo.png" className="w-8 h-8 object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm" alt="BIS Logo" />
+              <img src="/logo.png" className="w-10 h-10 object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm rounded-full" alt="BIS Logo" />
               <span className="hidden sm:inline text-xl font-black tracking-tighter font-display text-slate-900">BISonline</span>
             </button>
 
@@ -407,11 +407,11 @@ const Navbar = () => {
                                 className="w-8 h-8 rounded-full border border-slate-100 object-cover"
                                 alt=""
                               />
-                              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></div>
+                              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full animate-pulse"></div>
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{user.displayName}</p>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{user.role}</p>
+                              <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{user?.displayName}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{user?.role}</p>
                             </div>
                           </button>
 

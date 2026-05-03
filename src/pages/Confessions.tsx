@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, Heart, MessageSquare, Image as ImageIcon, Trash2, Shield, User, Ghost, Clock, SendHorizontal, X, Paperclip, Youtube, FileText, Download, MoreVertical, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import { getSafeDate } from '../lib/dateUtils';
-import { uploadFile } from '../services/uploadService';
+import { uploadFileDetailed as uploadFile } from '../services/storageService';
 import { ConfessionSkeleton } from '../components/Skeleton';
 
 export default function Confessions() {

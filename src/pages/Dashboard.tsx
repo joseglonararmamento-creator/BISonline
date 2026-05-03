@@ -22,9 +22,8 @@ export default function Dashboard() {
   const [recentSubmissions, setRecentSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [offlineCount, setOfflineCount] = useState(0);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [interactions, setInteractions] = useState<{ [key: string]: { hearts: number, comments: any[] } }>({});
   const [newPostText, setNewPostText] = useState('');
@@ -35,6 +34,13 @@ export default function Dashboard() {
   const [postToDelete, setPostToDelete] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showMobilePost, setShowMobilePost] = useState(false);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    const qCount = query(collection(db, 'users'), where('isOnline', '==', true), limit(100));
+    const unsubCount = onSnapshot(qCount, (snap) => setOnlineCount(snap.size));
+    return () => unsubCount();
+  }, [isOnline]);
 
   const handleDeletePost = async () => {
     if (!postToDelete) return;
@@ -257,7 +263,6 @@ export default function Dashboard() {
             if (lesson) stored.push(lesson);
           }
           setLessons(stored);
-          setOfflineCount(keys.length);
         }
       } catch (error) {
         console.error("Dashboard data fetch error:", error);
@@ -268,19 +273,6 @@ export default function Dashboard() {
 
     if (profile && !authLoading) fetchData();
   }, [profile, isOnline, authLoading]);
-
-  // Real-time online users listener
-  useEffect(() => {
-    if (!isOnline) return;
-    const q = query(collection(db, 'users'), where('isOnline', '==', true), limit(10));
-    const unsubscribe = onSnapshot(q, (snap) => {
-      const users = snap.docs
-        .map(d => d.data() as UserProfile)
-        .filter(u => u.uid !== profile?.uid); // Exclude self
-      setOnlineUsers(users);
-    });
-    return () => unsubscribe();
-  }, [isOnline, profile?.uid]);
 
   // Real-time posts listener for social feed (Friends + Self)
   useEffect(() => {
@@ -677,7 +669,7 @@ export default function Dashboard() {
            </div>
            <div className="bg-white rounded-2xl p-4 border border-slate-100">
               <p className="text-[9px] font-black text-slate-400 uppercase mb-3">Online</p>
-              <span className="text-2xl font-black text-slate-900">{onlineUsers.length}</span>
+              <span className="text-2xl font-black text-slate-900">{onlineCount}</span>
            </div>
         </div>
       </div>

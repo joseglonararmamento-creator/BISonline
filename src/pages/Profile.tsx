@@ -91,8 +91,24 @@ export default function Profile() {
   
   const [friendship, setFriendship] = useState<Friendship | null>(null);
   const [requesting, setRequesting] = useState(false);
+  const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  
+  // Teacher specific
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [studentClasses, setStudentClasses] = useState<Class[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [newReminderText, setNewReminderText] = useState('');
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [reminderType, setReminderType] = useState<'status' | 'reminder'>('status');
+  const [uploadProgress, setUploadProgress] = useState(0);
 
-  // ... (assignments, submissions, classes, etc)
+  const [loading, setLoading] = useState(true);
+  const [updating, setUpdating] = useState(false);
+  const [inviteCode, setInviteCode] = useState('');
+  const [newPhotoURL, setNewPhotoURL] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!myProfile || !viewUserId || isOwnProfile) return;
@@ -138,24 +154,6 @@ export default function Profile() {
       setRequesting(false);
     }
   };
-  const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  
-  // Teacher specific
-  const [classes, setClasses] = useState<Class[]>([]);
-  const [studentClasses, setStudentClasses] = useState<Class[]>([]);
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  const [newReminderText, setNewReminderText] = useState('');
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [reminderType, setReminderType] = useState<'status' | 'reminder'>('status');
-  const [uploadProgress, setUploadProgress] = useState(0);
-
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-  const [newPhotoURL, setNewPhotoURL] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (profile?.photoURL) setNewPhotoURL(profile.photoURL);
