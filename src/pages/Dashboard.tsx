@@ -619,37 +619,10 @@ export default function Dashboard() {
             </div>
           ))}
           </AnimatePresence>
-
-          {/* Online Now Box - Always at the bottom of the feed */}
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6 pt-4">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Students & Teachers Online Now</h3>
-              <div className="flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-full">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-[10px] font-black text-emerald-600">{onlineUsers.length} Active</span>
-              </div>
-            </div>
-            <div className="flex gap-4 overflow-x-auto pb-2 custom-scrollbar no-scrollbar">
-              {onlineUsers.length === 0 && (
-                <div className="flex-1 text-center py-4 text-slate-400 text-[10px] uppercase font-bold italic tracking-wider">
-                  Gathering active members...
-                </div>
-              )}
-              {onlineUsers.map((u) => (
-                <div key={u.uid} className="flex flex-col items-center gap-1 shrink-0 relative group cursor-pointer" onClick={() => setSelectedUser(u)}>
-                  <div className="relative">
-                    <img src={u.photoURL || 'https://via.placeholder.com/48'} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover group-hover:scale-105 transition-all" alt="" />
-                    <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-sm"></div>
-                  </div>
-                  <span className="text-[9px] font-bold text-slate-500 truncate w-14 text-center">{u.displayName?.split(' ')[0]}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Sidebar (Right) */}
+        {/* Sidebar (Right) */}
       <div className="hidden lg:block w-80 h-fit space-y-6 sticky top-4">
         {/* Create Class Button - High Priority for Teacher */}
         {profile?.role === 'teacher' && (

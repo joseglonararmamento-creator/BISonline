@@ -153,6 +153,31 @@ const Navbar = () => {
   const [teacherClasses, setTeacherClasses] = useState<Class[]>([]);
   const [showClassSelector, setShowClassSelector] = useState<{ userId: string, userName: string } | null>(null);
 
+  const [showOnlineDropdown, setShowOnlineDropdown] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState<UserProfile[]>([]);
+  const [activeUserActionMenu, setActiveUserActionMenu] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isOnline) return;
+    const q = query(collection(db, 'users'), where('isOnline', '==', true), limit(30));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setOnlineUsers(snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)).filter(u => u.uid !== profile?.uid));
+    });
+    return () => unsubscribe();
+  }, [isOnline, profile?.uid]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (showOnlineDropdown && !(e.target as Element).closest('.online-dropdown-container')) {
+        setShowOnlineDropdown(false);
+        setActiveUserActionMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [showOnlineDropdown]);
+
   useEffect(() => {
     if (profile?.role === 'teacher') {
       const q = query(collection(db, 'classes'), where('teacherId', '==', profile.uid));
@@ -339,11 +364,95 @@ const Navbar = () => {
   return (
     <header className={`fixed top-0 left-0 right-0 h-14 glass-light border-b transition-all duration-500 z-50 ${isConfessions ? 'border-pink-500/30 ring-1 ring-pink-500/10' : 'border-indigo-500/30'}`}>
       <div className="max-w-[1240px] mx-auto h-full flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
-          <Link to="/" className="flex items-center gap-2 group">
-            <img src="/logo.png" className="w-8 h-8 object-contain group-hover:scale-110 transition-transform duration-300" alt="BIS Logo" />
-            <span className="hidden sm:inline text-xl font-black tracking-tighter font-display text-slate-900">BISonline</span>
-          </Link>
+        <div className="flex items-center gap-4 online-dropdown-container">
+          <div className="relative">
+            <button 
+              onClick={() => setShowOnlineDropdown(!showOnlineDropdown)}
+              className="flex items-center gap-2 group transition-all active:scale-95"
+            >
+              <img src="/logo.png" className="w-8 h-8 object-contain group-hover:scale-110 transition-transform duration-300 drop-shadow-sm" alt="BIS Logo" />
+              <span className="hidden sm:inline text-xl font-black tracking-tighter font-display text-slate-900">BISonline</span>
+            </button>
+
+            {/* Online Users Dropdown */}
+            <AnimatePresence>
+              {showOnlineDropdown && (
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 15 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 15 }}
+                  className="absolute top-full left-0 mt-3 w-72 bg-white/80 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-2xl z-[100] overflow-hidden"
+                >
+                  <div className="p-4 border-b border-white/20 bg-indigo-600/5 flex items-center justify-between">
+                    <h3 className="text-[10px] font-black text-indigo-900 uppercase tracking-widest">Members Online</h3>
+                    <div className="flex items-center gap-1.5 bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                      <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                      <span className="text-[8px] font-black text-emerald-600 uppercase tracking-tighter">{onlineUsers.length} Active</span>
+                    </div>
+                  </div>
+
+                  <div className="max-h-[300px] overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    {onlineUsers.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-xs italic">No other members online.</div>
+                    ) : (
+                      onlineUsers.map(user => (
+                        <div key={user.uid} className="relative">
+                          <button 
+                            onClick={() => setActiveUserActionMenu(activeUserActionMenu === user.uid ? null : user.uid)}
+                            className="w-full flex items-center gap-3 p-2.5 rounded-2xl hover:bg-white transition-all group text-left"
+                          >
+                            <div className="relative shrink-0">
+                              <img 
+                                src={user.photoURL || 'https://via.placeholder.com/40'} 
+                                className="w-8 h-8 rounded-full border border-slate-100 object-cover"
+                                alt=""
+                              />
+                              <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-bold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">{user.displayName}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{user.role}</p>
+                            </div>
+                          </button>
+
+                          {/* Inline Action Menu */}
+                          <AnimatePresence>
+                            {activeUserActionMenu === user.uid && (
+                              <motion.div 
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -10 }}
+                                className="absolute left-full top-0 ml-2 bg-white rounded-2xl shadow-2xl border border-slate-100 p-1.5 flex gap-1 z-[110] whitespace-nowrap"
+                              >
+                                <button 
+                                  onClick={() => {
+                                    navigate(`/profile?userId=${user.uid}`);
+                                    setShowOnlineDropdown(false);
+                                  }}
+                                  className="px-3 py-1.5 bg-slate-50 hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all"
+                                >
+                                  <User size={12} /> Profile
+                                </button>
+                                <button 
+                                  onClick={() => {
+                                    navigate(`/chat?userId=${user.uid}`);
+                                    setShowOnlineDropdown(false);
+                                  }}
+                                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-[9px] font-black uppercase tracking-widest flex items-center gap-2 transition-all shadow-lg shadow-indigo-100"
+                                >
+                                  <MessageCircle size={12} /> Message
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
       <div className="flex-1 max-w-md px-4 relative">

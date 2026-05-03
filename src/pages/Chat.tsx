@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -97,6 +98,8 @@ const AudioPlayer = ({ src, isMine }: { src: string, isMine: boolean }) => {
 
 export default function Chat() {
   const { profile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const targetUserId = searchParams.get('userId');
   const [messages, setMessages] = useState<Message[] | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [users, setUsers] = useState<ChatUser[]>([]);
@@ -141,7 +144,17 @@ export default function Chat() {
     if (!profile?.uid) return;
     const q = query(collection(db, 'users'), limit(50));
     const unsubscribe = onSnapshot(q, (snap) => {
-      setUsers(snap.docs.map(d => ({ ...d.data(), uid: d.id } as ChatUser)).filter(u => u.uid !== profile?.uid));
+      const usersList = snap.docs.map(d => ({ ...d.data(), uid: d.id } as ChatUser)).filter(u => u.uid !== profile?.uid);
+      setUsers(usersList);
+
+      // Handle direct message from URL
+      if (targetUserId && !selectedUser && !selectedClass) {
+        const target = usersList.find(u => u.uid === targetUserId);
+        if (target) {
+          setSelectedUser(target);
+          setChatType('dm');
+        }
+      }
     }, (err) => console.error("User list sync error:", err));
     return () => unsubscribe();
   }, [profile?.uid]);
