@@ -225,7 +225,7 @@ export default function Lessons() {
   );
 
   return (
-    <div className="space-y-6 gpu-accel">
+      <div className="space-y-6 gpu-accel">
       {!isOnline && (
         <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-center gap-3 text-amber-800 animate-in fade-in">
           <CloudOff size={20} className="shrink-0" />

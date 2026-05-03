@@ -619,7 +619,7 @@ export default function Dashboard() {
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Students & Teachers Online Now</h3>
               <div className="flex items-center gap-1.5 bg-emerald-50 px-2.5 py-1 rounded-full">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
                 <span className="text-[10px] font-black text-emerald-600">{onlineUsers.length} Active</span>
               </div>
             </div>
@@ -651,8 +651,8 @@ export default function Dashboard() {
             whileHover={{ y: -4 }}
             className="bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 rounded-2xl shadow-xl shadow-indigo-200 p-6 text-white relative overflow-hidden"
           >
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl" />
-            <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-purple-500/20 rounded-full blur-2xl" />
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-white/10 rounded-full blur-2xl"></div>
+            <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-purple-500/20 rounded-full blur-2xl"></div>
             
             <h3 className="text-[10px] font-black uppercase tracking-widest mb-2 flex items-center gap-2">
               <Megaphone size={12} className="text-indigo-200" />
@@ -702,6 +702,7 @@ export default function Dashboard() {
            </div>
         </div>
       </div>
+    </div>
 
       {/* User Interaction Dialog */}
       <AnimatePresence>
@@ -835,7 +836,6 @@ export default function Dashboard() {
       />
 
       <StudyAssistant />
-    </div>
     </div>
   );
 }
@@ -1046,7 +1046,7 @@ function PostCard({ post, profile, onDelete }: { post: Post, profile: UserProfil
           <AnimatePresence>
             {showOptions && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowOptions(false)} />
+                <div className="fixed inset-0 z-10" onClick={() => setShowOptions(false)}></div>
                 <motion.div 
                   initial={{ opacity: 0, scale: 0.95, y: -10 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}

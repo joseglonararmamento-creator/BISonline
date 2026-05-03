@@ -375,17 +375,18 @@ export default function Chat() {
     }
   };
 
-  if (!messages) return (
-    <div className="flex h-full items-center justify-center bg-white/50 backdrop-blur-md">
-      <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-xl flex flex-col items-center gap-4">
-        <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
-        <p className="text-sm font-black text-slate-900 uppercase tracking-widest">Loading messages...</p>
+  try {
+    if (!messages) return (
+      <div className="flex h-full items-center justify-center bg-white/50 backdrop-blur-md">
+        <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-xl flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+          <p className="text-sm font-black text-slate-900 uppercase tracking-widest">Loading messages...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
 
-  return (
-    <div className="h-full flex overflow-hidden bg-[#F8FAFC]">
+    return (
+      <div className="h-full flex overflow-hidden bg-[#F8FAFC]">
       {/* Search & List Sidebar */}
       <div className="w-80 border-r border-slate-200 hidden md:flex flex-col bg-white">
         <div className="p-6">
@@ -658,4 +659,7 @@ export default function Chat() {
       </div>
     </div>
   );
+  } catch (renderError) {
+    return <div style={{padding: '40px', textAlign: 'center'}} className="font-bold text-slate-900">Chat Render Error - Please Refresh App</div>;
+  }
 }
