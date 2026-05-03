@@ -510,7 +510,7 @@ export default function Lessons() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col my-auto"
+              className="bg-white rounded-3xl w-full max-w-xl shadow-2xl flex flex-col my-auto max-h-[90vh] overflow-hidden"
             >
               <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-indigo-600 text-white shrink-0">
                 <h3 className="text-lg font-bold">New Lesson</h3>
@@ -519,7 +519,7 @@ export default function Lessons() {
                 </button>
               </div>
 
-              <form onSubmit={handleAddLesson} className="flex flex-col flex-1 overflow-hidden">
+              <form onSubmit={handleAddLesson} className="flex flex-col min-h-0 overflow-hidden">
                 <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1.5 uppercase tracking-widest">Lesson Title</label>

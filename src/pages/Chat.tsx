@@ -170,21 +170,41 @@ export default function Chat() {
     return () => unsubscribe();
   }, [chatType, selectedUser, selectedClass, profile?.uid]);
 
+  const getSafeDate = (createdAt: any) => {
+    if (!createdAt) return null;
+    try {
+      if (typeof createdAt.toDate === 'function') return createdAt.toDate();
+      // Handle timestamp-like objects
+      if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
+    } catch (e) {
+      console.error("Date parse error", e);
+    }
+    return null;
+  };
+
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if ((!newMessage.trim() && !uploadingProgress) || !profile) return;
 
-    const messageText = newMessage.trim();
-    setNewMessage('');
-
-    let chatId = '';
-    if (chatType === 'dm' && selectedUser) {
-      chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
-    } else if (chatType === 'class' && selectedClass) {
-      chatId = selectedClass.id;
-    }
-
     try {
+      // Diagnostic alert
+      console.log("DEBUG: Preparing payload...");
+      
+      const messageText = newMessage.trim();
+      setNewMessage('');
+
+      let chatId = '';
+      if (chatType === 'dm' && selectedUser) {
+        chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+      } else if (chatType === 'class' && selectedClass) {
+        chatId = selectedClass.id;
+      }
+
+      if (!chatId) {
+        alert("CRITICAL ERROR: No Chat ID determined");
+        return;
+      }
+
       const payload: any = {
         senderId: profile.uid,
         text: messageText,
@@ -200,6 +220,8 @@ export default function Chat() {
       }
 
       const colPath = chatType === 'dm' ? `chats/${chatId}/messages` : `classes/${chatId}/messages`;
+      
+      console.log("DEBUG: Adding doc to:", colPath);
       const docRef = await addDoc(collection(db, colPath), payload);
       
       // Update undo state
@@ -208,7 +230,7 @@ export default function Chat() {
       
     } catch (err: any) {
       console.error("Send error:", err);
-      window.alert("Failed to send message: " + err.message);
+      alert("FAIL-SAFE: Message send failed. Error: " + err.message);
     }
   };
 
@@ -375,15 +397,14 @@ export default function Chat() {
     }
   };
 
-  try {
-    if (!messages) return (
-      <div className="flex h-full items-center justify-center bg-white/50 backdrop-blur-md">
-        <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-xl flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
-          <p className="text-sm font-black text-slate-900 uppercase tracking-widest">Loading messages...</p>
-        </div>
+  if (!messages) return (
+    <div className="flex h-full items-center justify-center bg-white/50 backdrop-blur-md">
+      <div className="p-8 bg-white border border-slate-200 rounded-3xl shadow-xl flex flex-col items-center gap-4">
+        <div className="w-12 h-12 border-4 border-indigo-600/30 border-t-indigo-600 rounded-full animate-spin" />
+        <p className="text-sm font-black text-slate-900 uppercase tracking-widest">Loading messages...</p>
       </div>
-    );
+    </div>
+  );
 
     return (
       <div className="h-full flex overflow-hidden bg-[#F8FAFC]">
@@ -498,16 +519,20 @@ export default function Chat() {
                 const isMine = m?.senderId === profile?.uid;
                 const sender = users?.find(u => u?.uid === m?.senderId);
                 const prevMsg = index > 0 ? (messages || [])[index - 1] : null;
+                
+                const mDate = getSafeDate(m.createdAt);
+                const pDate = getSafeDate(prevMsg?.createdAt);
+                
                 const showDate = index === 0 || 
-                  (m?.createdAt && prevMsg?.createdAt && 
-                  format(m.createdAt.toDate(), 'yyyy-MM-dd') !== format(prevMsg.createdAt.toDate(), 'yyyy-MM-dd'));
+                  (mDate && pDate && 
+                  format(mDate, 'yyyy-MM-dd') !== format(pDate, 'yyyy-MM-dd'));
 
                 return (
-                  <div key={m?.id}>
-                    {showDate && (
+                  <div key={m?.id || index}>
+                    {showDate && mDate && (
                       <div className="flex justify-center my-8">
                         <span className="px-4 py-1.5 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-widest shadow-sm">
-                          {m?.createdAt ? format(m.createdAt.toDate(), 'MMMM d, yyyy') : 'Recently'}
+                          {format(mDate, 'MMMM d, yyyy')}
                         </span>
                       </div>
                     )}
@@ -560,7 +585,7 @@ export default function Chat() {
                           
                           <div className={`mt-1 flex items-center gap-2 ${isMine ? 'justify-end' : 'justify-start'}`}>
                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                               {m?.createdAt ? format(m.createdAt.toDate(), 'h:mm a') : 'Sending...'}
+                               {mDate ? format(mDate, 'h:mm a') : 'Sending...'}
                              </span>
                              <button 
                                onClick={() => setShowReactionPicker(showReactionPicker === m?.id ? null : m?.id)}
@@ -659,7 +684,4 @@ export default function Chat() {
       </div>
     </div>
   );
-  } catch (renderError) {
-    return <div style={{padding: '40px', textAlign: 'center'}} className="font-bold text-slate-900">Chat Render Error - Please Refresh App</div>;
-  }
 }
