@@ -116,6 +116,84 @@ export default function Chat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+  const [otherUserLastRead, setOtherUserLastRead] = useState<any>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (!profile || chatType !== 'dm' || !selectedUser) {
+      setOtherUserTyping(false);
+      setOtherUserLastRead(null);
+      return;
+    }
+
+    const chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+    
+    // Listen for other user's typing status
+    const typingRef = doc(db, `chats/${chatId}/typing`, selectedUser.uid);
+    const unsubscribeTyping = onSnapshot(typingRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        const isTyping = data.isTyping && (Date.now() - (data.updatedAt?.toMillis() || 0) < 10000);
+        setOtherUserTyping(!!isTyping);
+      } else {
+        setOtherUserTyping(false);
+      }
+    });
+
+    // Listen for other user's read status
+    const chatRef = doc(db, 'chats', chatId);
+    const unsubscribeRead = onSnapshot(chatRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setOtherUserLastRead(docSnap.data().lastRead?.[selectedUser.uid]);
+      }
+    });
+
+    return () => {
+      unsubscribeTyping();
+      unsubscribeRead();
+    };
+  }, [profile?.uid, selectedUser?.uid, chatType]);
+
+  const updateTypingStatus = async (isTyping: boolean) => {
+    if (!profile || chatType !== 'dm' || !selectedUser) return;
+    const chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+    const typingRef = doc(db, `chats/${chatId}/typing`, profile.uid);
+    
+    try {
+      // Use dynamic import for setDoc if not available, but it's not even needed if I just import it at top.
+      // I'll check imports.
+      const { setDoc } = await import('firebase/firestore');
+      await setDoc(typingRef, {
+        isTyping,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    } catch (e) {
+      console.error("Typing status error", e);
+    }
+  };
+
+  const markAsRead = async () => {
+    if (!profile || chatType !== 'dm' || !selectedUser || !messages?.length) return;
+    const chatId = profile.uid < selectedUser.uid ? `${profile.uid}_${selectedUser.uid}` : `${selectedUser.uid}_${profile.uid}`;
+    const chatRef = doc(db, 'chats', chatId);
+    
+    try {
+      const { setDoc } = await import('firebase/firestore');
+      await setDoc(chatRef, {
+        lastRead: { [profile.uid]: serverTimestamp() }
+      }, { merge: true });
+    } catch (e) {
+      console.error("Read status error", e);
+    }
+  };
+
+  useEffect(() => {
+    if (messages?.length && chatType === 'dm') {
+      markAsRead();
+    }
+  }, [messages?.length, chatType]);
+
   useEffect(() => {
     if (!profile) return;
     const q = query(collection(db, 'users'), limit(50));
@@ -587,6 +665,9 @@ export default function Chat() {
                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter">
                                {mDate ? format(mDate, 'h:mm a') : 'Sending...'}
                              </span>
+                             {isMine && chatType === 'dm' && otherUserLastRead && mDate && mDate <= otherUserLastRead.toDate() && (
+                               <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Read</span>
+                             )}
                              <button 
                                onClick={() => setShowReactionPicker(showReactionPicker === m?.id ? null : m?.id)}
                                className="p-1 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 hover:text-indigo-600"
@@ -621,6 +702,21 @@ export default function Chat() {
                 );
               })}
               <div ref={scrollRef} />
+              
+              {chatType === 'dm' && otherUserTyping && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex gap-2 items-center text-slate-400 ml-2 py-2"
+                >
+                  <div className="flex gap-1">
+                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
+                    <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest">{selectedUser?.displayName} is typing...</span>
+                </motion.div>
+              )}
             </div>
 
             {/* Input Area */}
@@ -654,7 +750,21 @@ export default function Chat() {
                 <input 
                   type="text" 
                   value={newMessage}
-                  onChange={e => setNewMessage(e.target.value)}
+                  onChange={e => {
+                    setNewMessage(e.target.value);
+                    if (chatType === 'dm') {
+                      updateTypingStatus(true);
+                      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                      typingTimeoutRef.current = setTimeout(() => {
+                        updateTypingStatus(false);
+                      }, 3000);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (chatType === 'dm') {
+                      updateTypingStatus(false);
+                    }
+                  }}
                   placeholder="Type a message..."
                   className="flex-1 bg-transparent px-2 outline-none text-sm font-medium"
                 />

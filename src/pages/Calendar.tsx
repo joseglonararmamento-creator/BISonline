@@ -251,10 +251,16 @@ export default function CalendarPage() {
       {/* Add Event Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          >
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
               className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl"
             >
               <div className="flex justify-between items-center mb-6">
@@ -293,7 +299,7 @@ export default function CalendarPage() {
                 </div>
               </form>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

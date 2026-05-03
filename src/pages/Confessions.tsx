@@ -256,11 +256,11 @@ export default function Confessions() {
       <div className="grid gap-6">
         <AnimatePresence mode="popLayout">
           {loading ? (
-            <>
+            <motion.div key="skeletons" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               <ConfessionSkeleton />
               <ConfessionSkeleton />
               <ConfessionSkeleton />
-            </>
+            </motion.div>
           ) : confessions.map((confession) => (
             <ConfessionCard key={confession.id} confession={confession} currentProfile={profile} />
           ))}
@@ -458,7 +458,11 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
 
               <AnimatePresence>
                 {showOptions && (
-                  <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                  >
                     <div className="fixed inset-0 z-10" onClick={() => setShowOptions(false)} />
                     <motion.div 
                       initial={{ opacity: 0, scale: 0.95, y: -10 }}
@@ -483,7 +487,7 @@ function ConfessionCard({ confession, currentProfile }: { confession: Confession
                         Delete Confession
                       </button>
                     </motion.div>
-                  </>
+                  </motion.div>
                 )}
               </AnimatePresence>
             </div>

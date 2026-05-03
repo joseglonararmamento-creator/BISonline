@@ -159,6 +159,37 @@ service cloud.firestore {
     match /classes/{classId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isTeacher();
+      
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (
+          isTeacher() || getUserData().get('classIds', []).hasAny([classId]) || 
+          getUserData().get('classNumber', '') == classId ||
+          get(/databases/$(database)/documents/classes/$(classId)).data.students.hasAny([request.auth.uid]) ||
+          get(/databases/$(database)/documents/classes/$(classId)).data.teacherId == request.auth.uid
+        );
+        allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+        allow delete: if isSignedIn() && (existing().senderId == request.auth.uid || isTeacher());
+        allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']);
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if isSignedIn() && chatId.contains(request.auth.uid);
+      allow create: if isSignedIn() && chatId.contains(request.auth.uid);
+      allow update: if isSignedIn() && chatId.contains(request.auth.uid) 
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastRead']);
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && chatId.contains(request.auth.uid);
+        allow create: if isSignedIn() && incoming().senderId == request.auth.uid;
+        allow delete: if isSignedIn() && existing().senderId == request.auth.uid;
+        allow update: if isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['reactions']);
+      }
+
+      match /typing/{userId} {
+        allow read: if isSignedIn() && chatId.contains(request.auth.uid);
+        allow write: if isOwner(userId) && chatId.contains(request.auth.uid);
+      }
     }
 
     match /reminders/{reminderId} {

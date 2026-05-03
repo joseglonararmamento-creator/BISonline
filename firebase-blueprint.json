@@ -230,6 +230,10 @@
     "posts": { "schema": "Post", "description": "User status updates" },
     "confessions": { "schema": "Confession", "description": "Anonymous or public confessions" },
     "comments": { "schema": "Comment", "description": "User comments on posts or confessions" },
-    "friends": { "schema": "Friendship", "description": "User connections" }
+    "friends": { "schema": "Friendship", "description": "User connections" },
+    "chats/{chatId}": { "schema": "object", "description": "Chat metadata including read receipts" },
+    "chats/{chatId}/messages": { "schema": "Message", "description": "Messages in a direct chat" },
+    "chats/{chatId}/typing": { "schema": "object", "description": "Real-time typing indicators" },
+    "classes/{classId}/messages": { "schema": "Message", "description": "Messages in a class channel" }
   }
 }
