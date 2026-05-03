@@ -516,18 +516,18 @@ export default function Dashboard() {
                 <PostSkeleton />
                 <PostSkeleton />
               </>
-            ) : [...posts, ...lessons.map(l => ({ ...l, isLesson: true }))]
-              .sort((a: any, b: any) => {
-                const dateA = a.createdAt?.toDate?.()?.getTime() || 0;
-                const dateB = b.createdAt?.toDate?.()?.getTime() || 0;
+            ) : ([...(posts || []), ...(lessons?.map(l => ({ ...l, isLesson: true })) || [])] as any[])
+              .sort((a, b) => {
+                const dateA = a?.createdAt?.toDate?.()?.getTime() || 0;
+                const dateB = b?.createdAt?.toDate?.()?.getTime() || 0;
                 return dateB - dateA;
               })
               .map((item: any) => (
-                item.isLesson ? (
+                item?.isLesson ? (
                   <motion.div 
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    key={item.id} 
+                    key={item?.id} 
                     className="bg-white rounded-xl shadow-md border border-slate-100 overflow-hidden"
                   >
                   <div className="p-4 flex items-center justify-between">
@@ -536,7 +536,7 @@ export default function Dashboard() {
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 hover:underline cursor-pointer">BISonline Academic</h4>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight flex items-center gap-1">
-                          Lesson • {item.createdAt ? format(item.createdAt.toDate(), 'MMM d') : 'Recently'}
+                          Lesson • {item?.createdAt ? format(item.createdAt.toDate(), 'MMM d') : 'Recently'}
                         </p>
                       </div>
                     </div>
@@ -545,8 +545,8 @@ export default function Dashboard() {
                     </button>
                   </div>
                   <div className="px-4 pb-3">
-                    <h5 className="font-bold text-slate-900 mb-2 text-lg leading-tight">{item.title}</h5>
-                    <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">{item.content}</p>
+                    <h5 className="font-bold text-slate-900 mb-2 text-lg leading-tight">{item?.title}</h5>
+                    <p className="text-sm text-slate-600 line-clamp-4 leading-relaxed">{item?.content}</p>
                   </div>
                   <div className="aspect-[16/9] bg-slate-50 flex items-center justify-center border-y border-slate-50">
                     <BookOpen size={48} className="text-indigo-100" />
@@ -566,17 +566,17 @@ export default function Dashboard() {
                         className="w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center text-[8px] text-white ring-2 ring-white cursor-pointer"
                       >🙌</motion.div>
                       <span className="ml-2 text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                        {interactions[item.id]?.hearts || Math.floor(Math.random() * 20)} Reactions
+                        {interactions[item?.id]?.hearts || 0} Reactions
                       </span>
                     </div>
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">
-                       {interactions[item.id]?.comments?.length || Math.floor(Math.random() * 5)} Comments
+                       {interactions[item?.id]?.comments?.length || 0} Comments
                     </span>
                   </div>
                   <div className="px-2 pb-2 flex items-center gap-2">
                     <motion.button 
                       whileTap={{ scale: 1.4 }}
-                      onClick={() => handleStatHeart(item.id)}
+                      onClick={() => handleStatHeart(item?.id)}
                       className="flex-1 py-2 hover:bg-slate-50 rounded-lg text-slate-600 font-bold text-xs flex items-center justify-center gap-2 transition-all active:text-red-500"
                     >
                       <TrendingUp size={16} />
@@ -590,10 +590,10 @@ export default function Dashboard() {
                 </motion.div>
                 ) : (
                   <PostCard 
-                    key={item.id} 
+                    key={item?.id} 
                     post={item} 
                     profile={profile} 
-                    onDelete={() => setPostToDelete(item.id)} 
+                    onDelete={() => setPostToDelete(item?.id)} 
                   />
                 )
               ))}

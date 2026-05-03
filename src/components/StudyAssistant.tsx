@@ -75,25 +75,15 @@ export default function StudyAssistant() {
           drag
           dragConstraints={{ left: 20, right: window.innerWidth - 84, top: 20, bottom: window.innerHeight - 84 }}
           dragTransition={{ bounceStiffness: 600, bounceDamping: 20 }}
-          onDragEnd={(_, info) => {
-            // Snapping logic to nearest horizontal edge
-            const midPoint = window.innerWidth / 2;
-            const targetX = info.point.x > midPoint ? window.innerWidth - 84 : 20;
-            // Note: In motion, x/y are relative to initial position. 
-            // For simplicity in this demo, we'll let motion handle the free-ness but snap can be complex.
-            // Let's use whileDrag for purely free movement and Snap back if released in a zone?
-            // Actually, Framer Motion drag isn't absolute positioning by default. 
-            // Let's keep it simple: allow drag anywhere.
-          }}
           initial={{ scale: 0, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           whileHover={{ scale: 1.1 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 z-[100] w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full shadow-2xl flex items-center justify-center text-white cursor-move group"
+          className="fixed bottom-6 right-6 z-[100] w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full shadow-2xl flex items-center justify-center text-white cursor-move group"
         >
-          <Sparkles className="group-hover:rotate-12 transition-transform" size={28} />
-          <div className="absolute -top-12 right-0 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+          <Sparkles className="group-hover:rotate-12 transition-transform" size={24} />
+          <div className="hidden md:block absolute -top-12 right-0 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest py-1.5 px-3 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
             Long Press to Drag
           </div>
         </motion.button>
@@ -106,7 +96,7 @@ export default function StudyAssistant() {
             initial={{ opacity: 0, scale: 0.9, y: 20, x: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0, x: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20, x: 20 }}
-            className="fixed bottom-6 right-6 z-[101] w-[380px] h-[550px] bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden"
+            className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[101] w-[calc(100vw-2rem)] md:w-[380px] h-[calc(100vh-8rem)] md:h-[550px] bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden"
           >
             {/* Header */}
             <div className="p-4 bg-indigo-600 text-white flex items-center justify-between">

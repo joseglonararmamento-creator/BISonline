@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   onAuthStateChanged, 
-  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,
   GoogleAuthProvider, 
   signOut,
   setPersistence,
@@ -70,6 +71,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     testConnection();
 
     let unsubscribeProfile: (() => void) | null = null;
+
+    const checkRedirect = async () => {
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Logged in after redirect:", result.user.displayName);
+        }
+      } catch (err: any) {
+        console.error("Redirect login error:", err);
+        if (err.code !== 'auth/popup-closed-by-user') {
+          alert('Google Login Error: ' + err.code + ' - ' + err.message);
+        }
+      }
+    };
+    checkRedirect();
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -156,10 +172,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async () => {
     try {
+      await setPersistence(auth, browserLocalPersistence);
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } catch (err) {
+      // On mobile, signInWithRedirect is much more stable than signInWithPopup
+      await signInWithRedirect(auth, provider);
+    } catch (err: any) {
       console.error("Sign in error:", err);
+      alert('Google Login Error: ' + err.code + ' - ' + err.message);
     }
   };
 
